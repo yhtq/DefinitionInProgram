@@ -1,10 +1,28 @@
-name = "CLAI"
+name = "DefintionInProgram"
 version = "0.1.0"
-defaultTargets = ["clai"]
+defaultTargets = ["DefintionInProgram"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+autoImplicit = true
+relaxedAutoImplicit = false
 
 [[require]]
 name = "mathlib"
 
+
+[[lean_lib]]
+name = "ITree"
+globs = ["ITree", "ITree.+"]
+
+[[lean_lib]]
+name = "Paco"
+globs = ["Paco", "Paco.+"]
+
+[[lean_lib]]
+name = "DefinitionInProgramLib"
+globs = ["DefintionInProgram.+"]
+
 [[lean_exe]]
-name = "clai"
+name = "DefintionInProgram"
 root = "Main"
