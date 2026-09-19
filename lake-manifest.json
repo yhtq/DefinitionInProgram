@@ -3,6 +3,17 @@
     "packagesDir": ".lake/packages",
     "packages": [
         {
+            "url": "https://github.com/leanprover-community/iris-lean.git",
+            "type": "git",
+            "subDir": "Iris",
+            "rev": "391b22c69f63169c3b1c9dbb0ff736ebeef6514f",
+            "name": "iris",
+            "manifestFile": "lake-manifest.json",
+            "inputRev": "391b22c69f63169c3b1c9dbb0ff736ebeef6514f",
+            "inherited": false,
+            "configFile": "lakefile.toml"
+        },
+        {
             "name": "mathlib",
             "type": "path",
             "dir": ".lake/packages/mathlib",
