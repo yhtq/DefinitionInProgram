@@ -1,0 +1,267 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This script is intentionally the only part of the toolchain update that
+# talks to GitHub. Nix remains responsible for fetching, overriding, and
+# building every derivation from the pinned data it writes below.
+
+if [[ ! -f flake.nix || ! -f nix/lean-toolchain.json ]]; then
+  printf '%s\n' "Run this command from the project root." >&2
+  exit 1
+fi
+
+metadata_file="nix/lean-toolchain.json"
+lean_toolchain_file="lean-toolchain"
+release="${LEAN_RELEASE:-latest}"
+dry_run=false
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/update-lean-toolchain [options]
+
+Resolve the newest Lean release and the newest revisions of the Lean packages
+used by this project, prefetch their Nix source hashes, and update:
+  nix/lean-toolchain.json
+  lean-toolchain
+
+Options:
+  --release VERSION  Use a specific Lean release instead of the latest one.
+  --dry-run          Resolve and print the new pin without changing files.
+  -h, --help         Show this help.
+
+Environment:
+  LEAN_RELEASE       Same as --release VERSION.
+EOF
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --release)
+      (($# >= 2)) || { printf '%s\n' "--release requires a version" >&2; exit 2; }
+      release="$2"
+      shift 2
+      ;;
+    --dry-run)
+      dry_run=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+api() {
+  curl --fail --silent --show-error --location --retry 3 \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    -H 'User-Agent: CLAI-lean-toolchain-updater' \
+    "$1"
+}
+
+archive_url() {
+  local owner="$1" repo="$2" ref="$3" kind="$4"
+  if [[ "$kind" == tag ]]; then
+    printf 'https://github.com/%s/%s/archive/refs/tags/%s.tar.gz\n' "$owner" "$repo" "$ref"
+  else
+    printf 'https://github.com/%s/%s/archive/%s.tar.gz\n' "$owner" "$repo" "$ref"
+  fi
+}
+
+prefetch_json() {
+  local url="$1"
+  nix store prefetch-file --json --unpack --hash-type sha256 "$url"
+}
+
+prefetch_hash() {
+  prefetch_json "$1" | jq --exit-status --raw-output '.hash'
+}
+
+if [[ "$release" == latest ]]; then
+  release_json="$(api https://api.github.com/repos/leanprover/lean4/releases/latest)"
+else
+  release="${release#v}"
+  release_json="$(api "https://api.github.com/repos/leanprover/lean4/releases/tags/v${release}")"
+fi
+
+lean_tag="$(jq --exit-status --raw-output '.tag_name' <<<"$release_json")"
+lean_version="${lean_tag#v}"
+[[ "$lean_tag" != "$lean_version" ]] || {
+  printf 'Lean release has an unexpected tag: %s\n' "$lean_tag" >&2
+  exit 1
+}
+
+printf 'Lean %s: resolving source hash...\n' "$lean_version" >&2
+lean_source_json="$(prefetch_json "$(archive_url leanprover lean4 "$lean_tag" tag)")"
+lean_hash="$(jq --exit-status --raw-output '.hash' <<<"$lean_source_json")"
+lean_source_path="$(jq --exit-status --raw-output '.storePath' <<<"$lean_source_json")"
+mimalloc_tag="$(awk '
+  /GIT_REPOSITORY[[:space:]]+https:\/\/github.com\/microsoft\/mimalloc/ { in_mimalloc=1; next }
+  in_mimalloc && /GIT_TAG/ { print $2; exit }
+  in_mimalloc && /FetchContent_MakeAvailable/ { exit }
+' "$lean_source_path/CMakeLists.txt")"
+if [[ -z "$mimalloc_tag" ]]; then
+  printf "Unable to find Lean's mimalloc tag in %s/CMakeLists.txt\n" "$lean_source_path" >&2
+  exit 1
+fi
+printf 'mimalloc %s: resolving source hash...\n' "$mimalloc_tag" >&2
+mimalloc_hash="$(prefetch_hash "$(archive_url microsoft mimalloc "$mimalloc_tag" tag)")"
+
+# These are the packages exposed by the current lake-manifest.json. We pin
+# commits rather than moving branches; only this script performs the network
+# lookup needed to turn the moving upstream branches into reproducible Nix
+# inputs. Their Lake dependencies are re-evaluated in the overridden scope.
+package_keys=(
+  mathlib
+  plausible
+  LeanSearchClient
+  importGraph
+  proofwidgets
+  aesop
+  Qq
+  batteries
+  Cli
+)
+package_owners=(
+  leanprover-community
+  leanprover-community
+  leanprover-community
+  leanprover-community
+  leanprover-community
+  leanprover-community
+  leanprover-community
+  leanprover-community
+  leanprover
+)
+package_repos=(
+  mathlib4
+  plausible
+  LeanSearchClient
+  import-graph
+  ProofWidgets4
+  aesop
+  quote4
+  batteries
+  lean4-cli
+)
+
+fake_npm_hash='sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+packages_json='{}'
+for index in "${!package_keys[@]}"; do
+  key="${package_keys[$index]}"
+  owner="${package_owners[$index]}"
+  repo="${package_repos[$index]}"
+
+  printf '%s: resolving default branch...\n' "$key" >&2
+  repository_json="$(api "https://api.github.com/repos/${owner}/${repo}")"
+  default_branch="$(jq --exit-status --raw-output '.default_branch' <<<"$repository_json")"
+  commits_json="$(curl --fail --silent --show-error --location --retry 3 \
+    -G -H 'Accept: application/vnd.github+json' \
+    -H 'X-GitHub-Api-Version: 2022-11-28' \
+    -H 'User-Agent: CLAI-lean-toolchain-updater' \
+    --data-urlencode "sha=${default_branch}" \
+    --data-urlencode 'per_page=1' \
+    "https://api.github.com/repos/${owner}/${repo}/commits")"
+  revision="$(jq --exit-status --raw-output '.[0].sha' <<<"$commits_json")"
+
+  printf '%s @ %.12s: resolving source hash...\n' "$key" "$revision" >&2
+  source_hash="$(prefetch_hash "$(archive_url "$owner" "$repo" "$revision" revision)")"
+
+  if [[ "$key" == proofwidgets ]]; then
+    package_json="$(jq -n \
+      --arg owner "$owner" \
+      --arg repo "$repo" \
+      --arg version "$lean_version" \
+      --arg rev "$revision" \
+      --arg hash "$source_hash" \
+      --arg npmHash "$fake_npm_hash" \
+      '{owner: $owner, repo: $repo, version: $version, rev: $rev, hash: $hash, npmHash: $npmHash}')"
+  else
+    package_json="$(jq -n \
+      --arg owner "$owner" \
+      --arg repo "$repo" \
+      --arg version "$lean_version" \
+      --arg rev "$revision" \
+      --arg hash "$source_hash" \
+      '{owner: $owner, repo: $repo, version: $version, rev: $rev, hash: $hash}')"
+  fi
+  packages_json="$(jq -c --arg key "$key" --argjson value "$package_json" \
+    '. + {($key): $value}' <<<"$packages_json")"
+done
+
+new_metadata="$(jq -n \
+  --argjson schemaVersion 1 \
+  --arg owner leanprover \
+  --arg repo lean4 \
+  --arg version "$lean_version" \
+  --arg tag "$lean_tag" \
+  --arg hash "$lean_hash" \
+  --arg mimallocOwner microsoft \
+  --arg mimallocRepo mimalloc \
+  --arg mimallocTag "$mimalloc_tag" \
+  --arg mimallocHash "$mimalloc_hash" \
+  --argjson packages "$packages_json" \
+  '{schemaVersion: $schemaVersion,
+    lean: {owner: $owner, repo: $repo, version: $version, tag: $tag, hash: $hash,
+      mimalloc: {owner: $mimallocOwner, repo: $mimallocRepo, tag: $mimallocTag, hash: $mimallocHash}},
+    packages: $packages}')"
+
+# ProofWidgets contains a second fixed-output dependency (its npm tree). Let
+# Nix calculate that NAR hash from the newly pinned source instead of trying to
+# reproduce prefetch-npm-deps in shell. The temporary fake pin is restored on
+# every exit path before the final metadata is written.
+original_metadata="$(cat "$metadata_file")"
+npm_log="$(mktemp)"
+restore_metadata() {
+  printf '%s\n' "$original_metadata" | jq '.' >"$metadata_file"
+  rm -f "$npm_log"
+}
+trap restore_metadata EXIT
+printf '%s\n' "$new_metadata" | jq '.' >"$metadata_file"
+if nix build .#proofwidgetsNpmDeps --no-link >"$npm_log" 2>&1; then
+  printf '%s\n' 'ProofWidgets npm prefetch unexpectedly succeeded with a fake hash.' >&2
+  cat "$npm_log" >&2
+  exit 1
+fi
+npm_hash="$(grep --only-matching --extended-regexp 'sha256-[A-Za-z0-9+/=]{43,44}' "$npm_log" | tail -n 1 || true)"
+if [[ -z "$npm_hash" ]]; then
+  printf '%s\n' 'Unable to extract the ProofWidgets npm hash from Nix:' >&2
+  cat "$npm_log" >&2
+  exit 1
+fi
+new_metadata="$(jq --arg npmHash "$npm_hash" \
+  '.packages.proofwidgets.npmHash = $npmHash' <<<"$new_metadata")"
+
+# Restore the old pin before either printing a dry-run result or atomically
+# installing the complete new pin below.
+restore_metadata
+trap - EXIT
+
+if [[ "$dry_run" == true ]]; then
+  printf '%s\n' "$new_metadata"
+  exit 0
+fi
+
+tmp_metadata="$(mktemp "${metadata_file}.XXXXXX")"
+tmp_toolchain="$(mktemp "${lean_toolchain_file}.XXXXXX")"
+cleanup() {
+  rm -f "$tmp_metadata" "$tmp_toolchain"
+}
+trap cleanup EXIT
+
+printf '%s\n' "$new_metadata" | jq '.' >"$tmp_metadata"
+printf 'leanprover/lean4:%s\n' "$lean_tag" >"$tmp_toolchain"
+
+mv "$tmp_metadata" "$metadata_file"
+mv "$tmp_toolchain" "$lean_toolchain_file"
+trap - EXIT
+
+printf 'Updated Lean %s and %d pinned package sources.\n' \
+  "$lean_version" "${#package_keys[@]}" >&2
+printf '%s\n' 'Run: nix flake check && nix build .#default'

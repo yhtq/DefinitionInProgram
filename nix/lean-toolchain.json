@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "lean": {
+    "owner": "leanprover",
+    "repo": "lean4",
+    "version": "4.34.0",
+    "tag": "v4.34.0",
+    "hash": "sha256-cFFGnIeQd+cLtw13jinmO5tMAEW7fpmU2cujk4gQdqs=",
+    "mimalloc": {
+      "owner": "microsoft",
+      "repo": "mimalloc",
+      "tag": "v3.4.4",
+      "hash": "sha256-CJ2sOio5cttIG27ZiotaES9X+ymHR5HXWK/O0JUjlC4="
+    }
+  },
+  "packages": {
+    "mathlib": {
+      "owner": "leanprover-community",
+      "repo": "mathlib4",
+      "version": "4.34.0",
+      "rev": "11246f19213a5a83fdb295532d1d72b4d51a34ea",
+      "hash": "sha256-EAbOBGGIXD+5LYkEgaD616c/s30noTt784FvWs/owJE="
+    },
+    "plausible": {
+      "owner": "leanprover-community",
+      "repo": "plausible",
+      "version": "4.34.0",
+      "rev": "118aa17ee84656b8bd727fef7c458ee8c833385c",
+      "hash": "sha256-/ianaKsruF30J5tqK4vtbXsFd3mu4Xt8Ppj4ibHDEvg="
+    },
+    "LeanSearchClient": {
+      "owner": "leanprover-community",
+      "repo": "LeanSearchClient",
+      "version": "4.34.0",
+      "rev": "ddf04cf3949fa556442341e87d47f9f6e6074707",
+      "hash": "sha256-S2dp1E3Xv9b+U+r+b/MKGHviOg7ySE8QAX7EoB6Jbl8="
+    },
+    "importGraph": {
+      "owner": "leanprover-community",
+      "repo": "import-graph",
+      "version": "4.34.0",
+      "rev": "e928b72544873815af278d38681b31c0293588e3",
+      "hash": "sha256-U3eskYuk2vJ35IJqBsIgOHKL03UHtlEriyssNkBxwjM="
+    },
+    "proofwidgets": {
+      "owner": "leanprover-community",
+      "repo": "ProofWidgets4",
+      "version": "4.34.0",
+      "rev": "106ff4fafc74ef4ac99d81dbf3ab399118f497a5",
+      "hash": "sha256-xjd3p+637F5q7xGTpDpy3/UCewpO8ArCfSAMAnAAjgs=",
+      "npmHash": "sha256-z3LCBPmowLlkn5w/z72J1l8WnY60F8I7r48HMM/Lnns="
+    },
+    "aesop": {
+      "owner": "leanprover-community",
+      "repo": "aesop",
+      "version": "4.34.0",
+      "rev": "355695d523e41d0554926416cba2a2b3544fbbc9",
+      "hash": "sha256-yF2+P7H0B3546zopncnH2APEynRRJjTy+17OEAFovkE="
+    },
+    "Qq": {
+      "owner": "leanprover-community",
+      "repo": "quote4",
+      "version": "4.34.0",
+      "rev": "6a489d9af5d0c47e5b259e2e8bcdfc1811b5a259",
+      "hash": "sha256-fRsOiIgpS0YYWUsL/TwYn+orRC4rgNz7NSQ4+XCHCHQ="
+    },
+    "batteries": {
+      "owner": "leanprover-community",
+      "repo": "batteries",
+      "version": "4.34.0",
+      "rev": "f2effa3d803fda822b1f97b806c47cf2adfbcbc2",
+      "hash": "sha256-Y/Vfr3gVFfik2Rfshgu0iIn0IQYYCb6ShDt5nZe4RBc="
+    },
+    "Cli": {
+      "owner": "leanprover",
+      "repo": "lean4-cli",
+      "version": "4.34.0",
+      "rev": "e92c9f15fdfacc8536f31cfb3b7ad26c3c8cd204",
+      "hash": "sha256-3HLYlycvm4Ho98pB7eF+u8RN1GQJ7Ve6COqMSZr4Hic="
+    }
+  }
+}

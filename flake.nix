@@ -28,6 +28,10 @@
       perSystem =
         { pkgs, ... }:
         let
+          toolchain = import ./nix/lean-toolchain.nix {
+            inherit pkgs nixpkgs;
+          };
+          leanPackages = toolchain.leanPackages;
           projectSrc = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter =
@@ -49,11 +53,13 @@
           ];
         in
         {
-          packages.mathlib = pkgs.leanPackages.mathlib;
+          packages.lean4 = leanPackages.lean4;
+          packages.proofwidgetsNpmDeps = toolchain.proofwidgetsNpmDeps;
+          packages.mathlib = leanPackages.mathlib;
           packages.mathlibDeps = pkgs.linkFarm "lean4-mathlib-deps" (
             map (name: {
               inherit name;
-              path = pkgs.leanPackages.${name};
+              path = leanPackages.${name};
             }) packageNames
           );
 
@@ -63,9 +69,9 @@
           packages.default =
             pkgs.runCommand "CLAI-0.1.0"
               {
-                nativeBuildInputs = with pkgs.leanPackages; [
-                  lean4
-                  mathlib
+                nativeBuildInputs = [
+                  leanPackages.lean4
+                  leanPackages.mathlib
                 ];
               }
               ''
@@ -73,6 +79,23 @@
                 mkdir -p "$out"
                 cp -r ${projectSrc}/. "$out/"
               '';
+
+          apps.updateLeanToolchain = {
+            type = "app";
+            program = "${
+              pkgs.writeShellApplication {
+                name = "update-lean-toolchain";
+                runtimeInputs = with pkgs; [
+                  coreutils
+                  curl
+                  jq
+                  nix
+                  gawk
+                ];
+                text = builtins.readFile ./scripts/update-lean-toolchain;
+              }
+            }/bin/update-lean-toolchain";
+          };
 
           apps.mountLakeDeps = {
             type = "app";
@@ -178,10 +201,10 @@
           };
 
           devShells.default = pkgs.mkShell {
-            packages = with pkgs; [
+            packages = [
               leanPackages.lean4
               leanPackages.mathlib
-              fuse-overlayfs
+              pkgs.fuse-overlayfs
             ];
           };
         };

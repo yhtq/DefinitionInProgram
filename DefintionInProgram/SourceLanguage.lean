@@ -194,6 +194,19 @@ theorem PCBlockChain.append
   | nil => exact second
   | cons notEnd step rest ih => exact .cons notEnd step (ih second)
 
+theorem PCBlockChain.eq_or_cons
+    {s ι : Type*} [SourceLanguage s]
+    {nextBlock : ι → Expr s} {pc : Ctx s → ι} {pcEnd : ι}
+    {start final : Ctx s}
+    (chain : PCBlockChain nextBlock pc pcEnd start final) :
+    start = final ∨ ∃ middle,
+      pc start ≠ pcEnd ∧
+      (∃ value, Sem (nextBlock (pc start)) start (value, middle)) ∧
+      PCBlockChain nextBlock pc pcEnd middle final := by
+  cases chain with
+  | nil => exact .inl rfl
+  | cons notEnd step rest => exact .inr ⟨_, notEnd, step, rest⟩
+
 
 /--
   `IsPC` means it is a part of state, and the expression in the trace is uniquely determined by the original pc.
@@ -208,6 +221,9 @@ class IsPC (ι : Type*) {s : Type*} [SourceLanguage s] (t : Expr s) where
   pc_end : ι
   start_ne_end : pc_start ≠ pc_end
 
+  /--
+    Expressions in a trace are exactly blocks indicated by pc
+  -/
   trace_determined : ∀ {ctx final tr} {h: Sem t ctx final}, (trace h tr) → List.map (fun (e, _) => e) tr = List.map next_block (List.map (fun (_, ctx) => (pc_retract.extract ctx)) tr)
 
   trace_start_pc : ∀ {ctx final tr} {h: Sem t ctx final}, (trace h tr) → (pc_retract.extract ctx) = pc_start

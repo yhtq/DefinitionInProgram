@@ -518,6 +518,25 @@ inductive MustTerminate (blocks : ι → Expr ι Empty) (pcEnd : ι) :
       (allSteps : ∀ next, Step blocks pcEnd config next → MustTerminate blocks pcEnd next) :
       MustTerminate blocks pcEnd config
 
+lemma execution_of_skip {ι Ghost} {blocks : ι → Expr ι Empty} {pcEnd : ι}
+    {c1 c2 : Config ι Ghost} (h : Relation.ReflTransGen (Step blocks pcEnd) c1 c2) : c1.expr = .skip -> c1 = c2 := by
+  induction h with
+  | refl => simp
+  | @tail b c h1 h' ih =>
+    intro h
+    simp [h] at ih
+    rw [<-ih] at h'
+    rcases c1 with ⟨e, s⟩
+    simp at h
+    subst h
+    cases h'
+
+lemma execution_of_skip' {ι Ghost} {blocks : ι → Expr ι Empty} {pcEnd : ι}
+    {s t : MonitorState ι Ghost} {e} (h : Relation.ReflTransGen (Step blocks pcEnd) { expr := .skip, state := s} {expr := e, state := t}) : e = .skip ∧ s = t := by
+  apply execution_of_skip at h
+  grind
+
+
 theorem Step.target_projection
     {blocks : ι → Expr ι Empty} {pcEnd : ι}
     {before after : Config ι Ghost}
@@ -536,6 +555,33 @@ theorem Step.target_projection
   | iteFalse => exact .inl rfl
   | «while» => exact .inl rfl
   | next notEnd run => exact .inr ⟨notEnd, run⟩
+
+/-- A monitor step which advances the target can take any result of the
+    current source block.  Steps which only manipulate monitor control or
+    ghost state are left unchanged. -/
+private theorem Step.retarget
+    {blocks : ι → Expr ι Empty} {pcEnd : ι}
+    {before after : Config ι Ghost}
+    (step : Step blocks pcEnd before after)
+    {chosen : State ι}
+    (run : Expr.BigStep (blocks before.state.target.pc)
+      before.state.target chosen) :
+    ∃ after', Step blocks pcEnd before after' ∧
+      (after'.state.target = before.state.target ∨
+        after'.state.target = chosen) := by
+  induction step with
+  | ghost => exact ⟨_, .ghost, .inl rfl⟩
+  | seqDone => exact ⟨_, .seqDone, .inl rfl⟩
+  | seqStep step ih =>
+      rcases ih run with ⟨after', step', same | chosen'⟩
+      · exact ⟨_, .seqStep step', .inl same⟩
+      · exact ⟨_, .seqStep step', .inr chosen'⟩
+  | choiceLeft => exact ⟨_, .choiceLeft, .inl rfl⟩
+  | choiceRight => exact ⟨_, .choiceRight, .inl rfl⟩
+  | iteTrue condition => exact ⟨_, .iteTrue condition, .inl rfl⟩
+  | iteFalse condition => exact ⟨_, .iteFalse condition, .inl rfl⟩
+  | «while» => exact ⟨_, .while, .inl rfl⟩
+  | next notEnd _ => exact ⟨_, .next notEnd run, .inr rfl⟩
 
 theorem MustTerminate.exists_execution
     {blocks : ι → Expr ι Empty} {pcEnd : ι}
@@ -594,6 +640,79 @@ theorem blockChain_to_sem
         ⟨(), rfl, by simpa [pc_agrees] using step.2⟩
         (.nil _)
 
+/-- A totally terminating monitor can follow any source block chain ending
+    at `pcEnd`. -/
+private theorem MustTerminate.coversBlockChain
+    {blocks : ι → Expr ι Empty} {pcEnd : ι}
+    {config : Config ι Ghost}
+    (terminates : MustTerminate blocks pcEnd config)
+    (allFinalAtEnd : ∀ final,
+      Relation.ReflTransGen (Step blocks pcEnd) config ⟨.skip, final⟩ →
+        final.target.pc = pcEnd)
+    {sourceFinal : State ι}
+    (sourceFinalAtEnd : sourceFinal.pc = pcEnd)
+    (chain : PCBlockChain (s := SourceLanguageTag ι)
+      blocks State.pc pcEnd config.state.target sourceFinal) :
+    ∃ monitorFinal,
+      Relation.ReflTransGen (Step blocks pcEnd) config ⟨.skip, monitorFinal⟩ ∧
+      monitorFinal.target = sourceFinal := by
+  revert allFinalAtEnd sourceFinal
+  induction terminates with
+  | done final =>
+      intro allFinalAtEnd sourceFinal sourceFinalAtEnd chain
+      cases final with
+      | skip state =>
+          have stateAtEnd := allFinalAtEnd state .refl
+          rcases chain.eq_or_cons with same | ⟨_, notEnd, _, _⟩
+          · exact ⟨state, .refl, same⟩
+          · exact False.elim (notEnd stateAtEnd)
+  | more hasStep allSteps ih =>
+      intro allFinalAtEnd sourceFinal sourceFinalAtEnd chain
+      rcases hasStep with ⟨nextConfig, step⟩
+      rcases chain.eq_or_cons with sameFinal | ⟨middle, notEnd, sourceStep, rest⟩
+      ·
+        rcases step.target_projection with same | ⟨notEnd, _⟩
+        · have nextFinalAtEnd : ∀ final,
+              Relation.ReflTransGen (Step blocks pcEnd) nextConfig ⟨.skip, final⟩ →
+                final.target.pc = pcEnd := by
+            intro final rest
+            exact allFinalAtEnd final ((Relation.ReflTransGen.single step).trans rest)
+          have nextChain : PCBlockChain (s := SourceLanguageTag ι)
+              blocks State.pc pcEnd nextConfig.state.target sourceFinal := by
+            rw [same.symm.trans sameFinal]
+            exact .nil _
+          rcases ih nextConfig step nextFinalAtEnd sourceFinalAtEnd nextChain with
+            ⟨monitorFinal, rest, targetEq⟩
+          exact ⟨monitorFinal, (Relation.ReflTransGen.single step).trans rest, targetEq⟩
+        · exact False.elim (notEnd ((congrArg State.pc sameFinal).trans sourceFinalAtEnd))
+      ·
+        rcases sourceStep with ⟨_, _, blockRun⟩
+        rcases step.retarget blockRun with ⟨nextConfig', step', same | chosen⟩
+        · have nextFinalAtEnd : ∀ final,
+              Relation.ReflTransGen (Step blocks pcEnd) nextConfig' ⟨.skip, final⟩ →
+                final.target.pc = pcEnd := by
+            intro final tail
+            exact allFinalAtEnd final ((Relation.ReflTransGen.single step').trans tail)
+          have nextChain : PCBlockChain (s := SourceLanguageTag ι)
+              blocks State.pc pcEnd nextConfig'.state.target sourceFinal := by
+            rw [same]
+            exact .cons notEnd ⟨(), rfl, blockRun⟩ rest
+          rcases ih nextConfig' step' nextFinalAtEnd sourceFinalAtEnd nextChain with
+            ⟨monitorFinal, tail, targetEq⟩
+          exact ⟨monitorFinal, (Relation.ReflTransGen.single step').trans tail, targetEq⟩
+        · have nextFinalAtEnd : ∀ final,
+              Relation.ReflTransGen (Step blocks pcEnd) nextConfig' ⟨.skip, final⟩ →
+                final.target.pc = pcEnd := by
+            intro final tail
+            exact allFinalAtEnd final ((Relation.ReflTransGen.single step').trans tail)
+          have nextChain : PCBlockChain (s := SourceLanguageTag ι)
+              blocks State.pc pcEnd nextConfig'.state.target sourceFinal := by
+            rw [chosen]
+            exact rest
+          rcases ih nextConfig' step' nextFinalAtEnd sourceFinalAtEnd nextChain with
+            ⟨monitorFinal, tail, targetEq⟩
+          exact ⟨monitorFinal, (Relation.ReflTransGen.single step').trans tail, targetEq⟩
+
 /-- Demonic total correctness: every branch terminates, and every terminal
     state satisfies the postcondition. -/
 def totalTriple {ι Ghost : Type*} (blocks : ι → Expr ι Empty) (pcEnd : ι)
@@ -614,28 +733,56 @@ checks every target choice. -/
 
 open SourceLanguage
 
+lemma monitor_covers_blocks{target : Expr ι Empty}
+    [pcInfo : IsPC ι (s := SourceLanguageTag ι) target]
+    {Ghost : Type*}
+    {monitor : MExpr ι Ghost}
+    {monitorPre monitorPost : MonitorState ι Ghost → Prop}
+    (pc_agrees : ∀ s : State ι, pcInfo.pc_retract.extract s = s.pc)
+    (verified : MExpr.totalTriple
+      pcInfo.next_block pcInfo.pc_end monitor monitorPre monitorPost)
+    (monitor_finishes_at_exit :
+      ∀ s, monitorPost s → s.target.pc = pcInfo.pc_end)
+: ∀ initial,
+    monitorPre initial →
+    ∀ {sourceFinal},
+      pcInfo.pc_retract.extract sourceFinal = pcInfo.pc_end →
+      PCBlockChain (s := SourceLanguageTag ι)
+        pcInfo.next_block pcInfo.pc_retract.extract pcInfo.pc_end
+        initial.target sourceFinal →
+      ∃ monitorFinal,
+        MExpr.Execution pcInfo.next_block pcInfo.pc_end
+          monitor initial monitorFinal ∧
+        monitorFinal.target = sourceFinal := by
+  intro initial hi sourceFinal sourceFinalAtEnd sourceChain
+  rcases verified initial hi with ⟨terminates, correctness⟩
+  have allFinalAtEnd : ∀ final,
+      Relation.ReflTransGen
+        (MExpr.Step pcInfo.next_block pcInfo.pc_end)
+        { expr := monitor, state := initial } { expr := .skip, state := final } →
+      final.target.pc = pcInfo.pc_end := by
+    intro final run
+    exact monitor_finishes_at_exit final (correctness final run)
+  have sourceFinalAtEnd' : sourceFinal.pc = pcInfo.pc_end := by
+    simpa [pc_agrees] using sourceFinalAtEnd
+  have pcEq : pcInfo.pc_retract.extract = State.pc := funext pc_agrees
+  have sourceChain' : PCBlockChain (s := SourceLanguageTag ι)
+      pcInfo.next_block State.pc pcInfo.pc_end initial.target sourceFinal := by
+    simpa [pcEq] using sourceChain
+  exact terminates.coversBlockChain allFinalAtEnd sourceFinalAtEnd' sourceChain'
+
 theorem verification_by_demonic_ghost_monitor
     {target : Expr ι Empty}
         [pcInfo : IsPC ι (s := SourceLanguageTag ι) target]
     {Ghost : Type*}
     {monitor : MExpr ι Ghost}
     {monitorPre monitorPost : MonitorState ι Ghost → Prop}
-    (pc_agrees : ∀ s : State ι, pcInfo.pc_retract.extract s = s.pc)
-    (source_starts_at_entry : ∀ s, monitorPre s → s.target.pc = pcInfo.pc_start)
     (verified : MExpr.totalTriple
       pcInfo.next_block pcInfo.pc_end monitor monitorPre monitorPost)
+    (pc_agrees : ∀ s : State ι, pcInfo.pc_retract.extract s = s.pc)
+    (source_starts_at_entry : ∀ s, monitorPre s → s.target.pc = pcInfo.pc_start)
     (monitor_finishes_at_exit :
       ∀ s, monitorPost s → s.target.pc = pcInfo.pc_end)
-    (monitor_covers_blocks : ∀ initial,
-      monitorPre initial →
-      ∀ {sourceFinal},
-        PCBlockChain (s := SourceLanguageTag ι)
-          pcInfo.next_block pcInfo.pc_retract.extract pcInfo.pc_end
-          initial.target sourceFinal →
-        ∃ monitorFinal,
-          MExpr.Execution pcInfo.next_block pcInfo.pc_end
-            monitor initial monitorFinal ∧
-          monitorFinal.target = sourceFinal)
     :
       SourceLanguage.totalTriple (s := SourceLanguageTag ι) target
         (MonitorState.target '' monitorPre)
@@ -645,7 +792,8 @@ theorem verification_by_demonic_ghost_monitor
   constructor
   · intro sourceFinal value sourceRun
     have sourceChain := pcInfo.block_chain_sound sourceRun
-    rcases monitor_covers_blocks monitorInitial monitorInitialPre sourceChain with
+    rcases monitor_covers_blocks pc_agrees verified monitor_finishes_at_exit
+      monitorInitial monitorInitialPre (pcInfo.trace_end_pc sourceRun) sourceChain with
       ⟨monitorFinal, monitorRun, targetEq⟩
     have monitorFinalPost := (verified monitorInitial monitorInitialPre).2
       monitorFinal monitorRun
