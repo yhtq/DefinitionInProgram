@@ -48,42 +48,69 @@ theorem PFunctor.M.unfold_corec'_left.{uA, uB, u} {P : PFunctor.{uA, uB}} {α : 
   (F : P.M ⊕ α → P (P.M ⊕ α))
   (h_eq : ∀ l, F (.inl l) = ⟨l.dest.1, Sum.inl ∘ l.dest.2⟩) :
   ∀ l, PFunctor.M.corec F (.inl l) = l := by
-  intros
-  apply PFunctor.M.bisim (λ t1 t2 => t1 = PFunctor.M.corec _ (Sum.inl t2)) _ _ _ rfl
-  intros t1 t2 h; subst h
-  simp only [PFunctor.M.dest_corec, PFunctor.map, h_eq]
-  have ⟨a, g⟩ := t2.dest
-  exact ⟨_, _, _, rfl, rfl, fun _ => rfl⟩
+  intro l
+  let R : P.M → P.M → Prop := fun t₁ t₂ => t₁ = PFunctor.M.corec F (.inl t₂)
+  apply PFunctor.M.bisim R
+  · intro t₁ t₂ h
+    subst t₁
+    rw [PFunctor.M.dest_corec, h_eq]
+    rcases hdest : t₂.dest with ⟨a, g⟩
+    exact ⟨a, _, g, rfl, rfl, fun _ => rfl⟩
+  · exact rfl
 
-theorem PFunctor.M.unfold_corec'.{uA, uB, u} {P : PFunctor.{uA, uB}} {α : Type u}
-  (F : ∀ {X : Type (max u uA uB)}, (α → X) → α → P.M ⊕ P X) (x : α) :
-  .corec' F x =
-  match F (@Sum.inr P.M α) x with
+def PFunctor.M.corecEmbed.{uA, uB, u} {P : PFunctor.{uA, uB}} {α : Type u}
+    (F : α → P.M ⊕ P (P.M ⊕ α)) (x : α) : P.M :=
+  let step : P.M ⊕ α → P (P.M ⊕ α) := fun s =>
+    match s with
+    | .inl l => P.map (@Sum.inl P.M α) l.dest
+    | .inr r =>
+      match F r with
+      | .inl l => P.map (@Sum.inl P.M α) l.dest
+      | .inr p => p
+  PFunctor.M.corec step (.inr x)
+
+theorem PFunctor.M.unfold_corecEmbed.{uA, uB, u} {P : PFunctor.{uA, uB}} {α : Type u}
+  (F : α → P.M ⊕ P (P.M ⊕ α)) (x : α) :
+  .corecEmbed F x =
+  match F x with
   | .inl l => l
   | .inr ⟨a, g⟩ => .mk ⟨a, fun i ↦
     match g i with
     | .inl l => l
-    | .inr r => .corec' F r⟩ := by
-  conv =>
-    lhs
-    simp only [PFunctor.M.corec', PFunctor.M.corec₁, PFunctor.M.corec_def, PFunctor.map, Sum.bind, Function.id_comp]
-  match F (@Sum.inr P.M α) x with
-  | .inl v =>
+    | .inr r => .corecEmbed F r⟩ := by
+  unfold corecEmbed
+  generalize hFx : F x = fx
+  cases fx with
+  | inl l =>
+    rw [PFunctor.M.corec_def]
     simp only
-    conv => rhs; rw [← (PFunctor.M.mk_dest v)]
+    rw [hFx]
+    simp only [PFunctor.map]
+    rw [← PFunctor.M.mk_dest l]
+    rcases hdest : l.dest with ⟨a, g⟩
     congr
-    have ⟨a, g⟩ := v.dest
-    simp only; congr; funext i
-    apply unfold_corec'_left _ (fun _ => rfl)
-  | .inr ⟨a, g⟩ =>
-    simp only; congr; funext i
-    simp only [Function.comp]
-    match g i with
-    | .inl l =>
-      simp only
-      apply unfold_corec'_left _ (fun _ => rfl)
-    | .inr r =>
-      simp only [PFunctor.M.corec', PFunctor.M.corec₁, PFunctor.map, Sum.bind, Function.id_comp]
+    funext i
+    apply unfold_corec'_left
+    intro l
+    rfl
+  | inr p =>
+    rw [PFunctor.M.corec_def]
+    simp only
+    rw [hFx]
+    rcases p with ⟨a, g⟩
+    simp only [PFunctor.map]
+    congr
+    funext i
+    split <;> rename_i hgi
+    · simp only [Function.comp_apply]
+      change PFunctor.M.corec _ (g i) = _
+      rw [hgi]
+      apply unfold_corec'_left
+      intro l
+      rfl
+    · simp only [Function.comp_apply]
+      change PFunctor.M.corec _ (g i) = _
+      rw [hgi]
 
 /-! # ----------------------------------------------------------------------- -/
 /-! # --------------------End PFunctor Utilities--------------------------- -/

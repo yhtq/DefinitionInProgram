@@ -1,5 +1,5 @@
 {
-  description = "CLAI — Lean 4 project using nixpkgs leanPackages";
+  description = "DefintionInProgram — Lean 4 project using nixpkgs leanPackages";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -67,7 +67,7 @@
           # artifacts into immutable dependency paths. This still verifies all
           # project imports against the nixpkgs-provided Mathlib.
           packages.default =
-            pkgs.runCommand "CLAI-0.1.0"
+            pkgs.runCommand "DefintionInProgram-0.1.0"
               {
                 nativeBuildInputs = [
                   leanPackages.lean4
@@ -76,7 +76,6 @@
               }
               ''
                 lean ${projectSrc}/Main.lean
-                mkdir -p "$out"
                 cp -r ${projectSrc}/. "$out/"
               '';
 
@@ -111,7 +110,7 @@
                 text = ''
                   packages=(mathlib plausible LeanSearchClient importGraph proofwidgets aesop Qq batteries Cli)
                   if [ ! -f flake.nix ] || [ ! -f lake-manifest.json ]; then
-                    echo "Run this command from the CLAI project root." >&2
+                    echo "Run this command from the DefintionInProgram project root." >&2
                     exit 1
                   fi
 

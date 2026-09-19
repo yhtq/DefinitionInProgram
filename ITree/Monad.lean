@@ -5,14 +5,14 @@ namespace ITree
 
 /- Functor Instance -/
 def map (f : α → β) (t : ITree ε α) : ITree ε β :=
-  .corec' (λ rec t =>
+  .corecEmbed (λ t =>
     match t.dest with
     | ⟨.ret v, _⟩ =>
       .inl <| ret <| f v
     | ⟨.tau, c⟩ =>
-      .inr <| tau' <| rec <| c 0
+      .inr <| tau' <| .inr <| c 0
     | ⟨.vis _ e, k⟩ =>
-      .inr <| vis' e (rec ∘ k)
+      .inr <| vis' e (.inr ∘ k)
   ) t
 
 instance : Functor (ITree ε) where
@@ -20,28 +20,28 @@ instance : Functor (ITree ε) where
 
 /- Basic map lemmas -/
 theorem map_ret {ε : Type u1 → Type v1} : map (ε := ε) f (ret v) = ret (f v) := by
-  conv => lhs; simp only [map]; rw [PFunctor.M.unfold_corec']
+  conv => lhs; simp only [map]; rw [PFunctor.M.unfold_corecEmbed]
   prove_unfold_lemma
 
 theorem map_tau {ε : Type u1 → Type v1} {c : ITree ε ρ} : map f (tau c) = tau (map f c) := by
-  conv => lhs; simp only [map]; rw [PFunctor.M.unfold_corec']
+  conv => lhs; simp only [map]; rw [PFunctor.M.unfold_corecEmbed]
   prove_unfold_lemma
 
 theorem map_vis {ε : Type u1 → Type v1} {α : Type u1} {e : ε α} {k : α → ITree ε ρ} {f : ρ → σ}
   : map f (vis e k) = vis e (λ x => map f <| k x) := by
-  conv => lhs; simp only [map]; rw [PFunctor.M.unfold_corec']
+  conv => lhs; simp only [map]; rw [PFunctor.M.unfold_corecEmbed]
   prove_unfold_lemma
 
 /- Monad Instance -/
 def bind {σ} (t : ITree ε ρ) (f : ρ → ITree ε σ) : ITree ε σ :=
-  .corec' (λ rec t =>
+  .corecEmbed (λ t =>
     match t.dest with
     | ⟨.ret v, _⟩ =>
       .inl <| f v
     | ⟨.tau, c⟩ =>
-      .inr <| tau' <| rec <| c 0
+      .inr <| tau' <| .inr <| c 0
     | ⟨.vis _ e, k⟩ =>
-      .inr <| vis' e (rec ∘ k)
+      .inr <| vis' e (.inr ∘ k)
   ) t
 
 instance : Monad (ITree ε) where
@@ -53,15 +53,15 @@ theorem bind_map (f : ITree ε (α → β)) (x : ITree ε α) : (f >>= λ f => m
 
 /- Bind monad lemmas -/
 theorem bind_ret : bind (ret v) f = f v := by
-  conv => lhs; simp only [bind]; rw [PFunctor.M.unfold_corec']
+  conv => lhs; simp only [bind]; rw [PFunctor.M.unfold_corecEmbed]
   prove_unfold_lemma
 
 theorem bind_tau : bind (tau c) f = tau (bind c f) := by
-  conv => lhs; simp only [bind]; rw [PFunctor.M.unfold_corec']
+  conv => lhs; simp only [bind]; rw [PFunctor.M.unfold_corecEmbed]
   prove_unfold_lemma
 
 theorem bind_vis : bind (vis e k) f = vis e λ x => bind (k x) f := by
-  conv => lhs; simp only [bind]; rw [PFunctor.M.unfold_corec']
+  conv => lhs; simp only [bind]; rw [PFunctor.M.unfold_corecEmbed]
   prove_unfold_lemma
 
 /- Functor Laws -/
@@ -77,7 +77,7 @@ macro "itree_eq" t:ident : tactic => `(tactic|(
   pcofix cih
   intro t
   pfold
-  apply dMatchOn t <;> (intros; rename_i h; subst h)
+  apply dMatchOn t <;> (intros; rename_i h; rw [h])
   · repeat rw [map_ret]
     repeat rw [bind_ret]
     constructor
@@ -89,7 +89,8 @@ macro "itree_eq" t:ident : tactic => `(tactic|(
     constructor; intros; pleft; apply cih
 ))
 
-theorem id_map (t : ITree ε ρ) : map id t = t := by itree_eq t
+theorem id_map (t : ITree ε ρ) : map id t = t := by
+  itree_eq t
 
 theorem comp_map (g : α → β) (h : β → γ) (t : ITree ε α) : map (h ∘ g) t = map h (map g t) := by
   itree_eq t
@@ -120,7 +121,7 @@ macro "itree_eq_map_const" x:ident y:ident : tactic => `(tactic|(
   pcofix cih
   intro x y
   pfold
-  apply dMatchOn x <;> (intros; rename_i h; subst h)
+  apply dMatchOn x <;> (intros; rename_i h; rw [h]; subst h)
   · repeat rw [map_ret]
     repeat rw [bind_ret]
     repeat rw [map_const_left]
@@ -161,7 +162,7 @@ theorem bind_assoc (x : ITree ε α) (f : α → ITree ε β) (g : β → ITree 
   pcofix cih
   intro x f g
   pfold
-  apply dMatchOn x <;> (intros; rename_i h; subst h)
+  apply dMatchOn x <;> (intros; rename_i h; rw [h]; subst h)
   · repeat rw [bind_ret]
     apply ieq_rfl
     intros _ _ h

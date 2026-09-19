@@ -32,7 +32,7 @@ inductive IterState (ι : Type u) (ρ : Type v)
 class MonadIter (m : Type u -> Type v) where
   iter : {ρ ι : Type u} → (ι -> m (IterState ι ρ)) -> ι -> m ρ
 
-instance instMonadIterStateT {σ m} [Monad m] [MI : MonadIter m] : MonadIter (StateT σ m) where
+instance instMonadIterStateT.{u, v} {σ : Type u} {m : Type u -> Type v} [Monad m] [MI : MonadIter m] : MonadIter (StateT σ m) where
   iter step i s :=
     MonadIter.iter (fun (i, s) =>
       step i s >>= fun (i, s) =>
@@ -48,17 +48,17 @@ inductive IterMode {ε ρ ι}
   | bindS (t : ITree ε (IterState ι ρ))
 
 def iter {ε ρ ι} (step : ι → ITree ε (IterState ι ρ)) (i : ι) : ITree ε ρ :=
-  .corec' (fun rec (s : IterMode) =>
+  .corecEmbed (fun (s : IterMode) =>
     match s with
     | .bindS t =>
       match t.dest with
       | ⟨.ret v, _⟩ =>
         match v with
         | .done r => .inl <| ret r
-        | .recur l => .inr <| tau' <| rec <| .bindS (step l)
-      | ⟨.tau, c⟩ => .inr <| tau' <| rec <| .bindS <| c 0
-      | ⟨.vis _ e, k⟩ => .inr <| vis' e <| fun a => rec <| .bindS <| k a
-    | .iterS i => .inr <| tau' <| rec <| .bindS (step i)
+        | .recur l => .inr <| tau' <| .inr <| .bindS (step l)
+      | ⟨.tau, c⟩ => .inr <| tau' <| .inr <| .bindS <| c 0
+      | ⟨.vis _ e, k⟩ => .inr <| vis' e <| fun a => .inr <| .bindS <| k a
+    | .iterS i => .inr <| tau' <| .inr <| .bindS (step i)
   ) (.iterS i)
 
 instance {ε : Type u → Type v} : MonadIter (ITree ε) where

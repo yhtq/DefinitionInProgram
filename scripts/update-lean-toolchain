@@ -113,12 +113,31 @@ fi
 printf 'mimalloc %s: resolving source hash...\n' "$mimalloc_tag" >&2
 mimalloc_hash="$(prefetch_hash "$(archive_url microsoft mimalloc "$mimalloc_tag" tag)")"
 
-# These are the packages exposed by the current lake-manifest.json. We pin
-# commits rather than moving branches; only this script performs the network
-# lookup needed to turn the moving upstream branches into reproducible Nix
-# inputs. Their Lake dependencies are re-evaluated in the overridden scope.
+# Mathlib releases are tied to a specific Lean release. Use Mathlib's matching
+# release tag as the compatibility root, then take all transitive revisions
+# from its manifest. Resolving every repository's default branch independently
+# can mix stable Lean with dependencies already targeting the next release.
+mathlib_owner=leanprover-community
+mathlib_repo=mathlib4
+mathlib_tag="v${lean_version}"
+printf 'mathlib %s: resolving release commit...\n' "$mathlib_tag" >&2
+mathlib_commit_json="$(api "https://api.github.com/repos/${mathlib_owner}/${mathlib_repo}/commits/${mathlib_tag}")"
+mathlib_revision="$(jq --exit-status --raw-output '.sha' <<<"$mathlib_commit_json")"
+printf 'mathlib @ %.12s: resolving source hash...\n' "$mathlib_revision" >&2
+mathlib_source_json="$(prefetch_json "$(archive_url "$mathlib_owner" "$mathlib_repo" "$mathlib_revision" revision)")"
+mathlib_hash="$(jq --exit-status --raw-output '.hash' <<<"$mathlib_source_json")"
+mathlib_source_path="$(jq --exit-status --raw-output '.storePath' <<<"$mathlib_source_json")"
+mathlib_toolchain="$(<"$mathlib_source_path/lean-toolchain")"
+if [[ "$mathlib_toolchain" != "leanprover/lean4:${lean_tag}" ]]; then
+  printf 'Mathlib %s requires %s, not Lean %s.\n' \
+    "$mathlib_tag" "$mathlib_toolchain" "$lean_tag" >&2
+  exit 1
+fi
+mathlib_manifest="$mathlib_source_path/lake-manifest.json"
+
+# These are the transitive packages exposed by Mathlib's lake-manifest.json.
+# Their Lake dependencies are re-evaluated in the overridden Nix scope.
 package_keys=(
-  mathlib
   plausible
   LeanSearchClient
   importGraph
@@ -136,11 +155,9 @@ package_owners=(
   leanprover-community
   leanprover-community
   leanprover-community
-  leanprover-community
   leanprover
 )
 package_repos=(
-  mathlib4
   plausible
   LeanSearchClient
   import-graph
@@ -152,23 +169,24 @@ package_repos=(
 )
 
 fake_npm_hash='sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-packages_json='{}'
+packages_json="$(jq -n \
+  --arg owner "$mathlib_owner" \
+  --arg repo "$mathlib_repo" \
+  --arg version "$lean_version" \
+  --arg rev "$mathlib_revision" \
+  --arg hash "$mathlib_hash" \
+  '{mathlib: {owner: $owner, repo: $repo, version: $version, rev: $rev, hash: $hash}}')"
 for index in "${!package_keys[@]}"; do
   key="${package_keys[$index]}"
   owner="${package_owners[$index]}"
   repo="${package_repos[$index]}"
 
-  printf '%s: resolving default branch...\n' "$key" >&2
-  repository_json="$(api "https://api.github.com/repos/${owner}/${repo}")"
-  default_branch="$(jq --exit-status --raw-output '.default_branch' <<<"$repository_json")"
-  commits_json="$(curl --fail --silent --show-error --location --retry 3 \
-    -G -H 'Accept: application/vnd.github+json' \
-    -H 'X-GitHub-Api-Version: 2022-11-28' \
-    -H 'User-Agent: CLAI-lean-toolchain-updater' \
-    --data-urlencode "sha=${default_branch}" \
-    --data-urlencode 'per_page=1' \
-    "https://api.github.com/repos/${owner}/${repo}/commits")"
-  revision="$(jq --exit-status --raw-output '.[0].sha' <<<"$commits_json")"
+  revision="$(jq --exit-status --raw-output --arg key "$key" \
+    '.packages[] | select(.name == $key) | .rev' "$mathlib_manifest")"
+  if [[ -z "$revision" ]]; then
+    printf 'Package %s is missing from %s.\n' "$key" "$mathlib_manifest" >&2
+    exit 1
+  fi
 
   printf '%s @ %.12s: resolving source hash...\n' "$key" "$revision" >&2
   source_hash="$(prefetch_hash "$(archive_url "$owner" "$repo" "$revision" revision)")"
@@ -262,6 +280,6 @@ mv "$tmp_metadata" "$metadata_file"
 mv "$tmp_toolchain" "$lean_toolchain_file"
 trap - EXIT
 
-printf 'Updated Lean %s and %d pinned package sources.\n' \
+printf 'Updated Lean %s, Mathlib, and %d pinned dependency sources.\n' \
   "$lean_version" "${#package_keys[@]}" >&2
 printf '%s\n' 'Run: nix flake check && nix build .#default'

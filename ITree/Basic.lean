@@ -8,13 +8,13 @@ inductive ITree.shape.{u1, v, u2} (ε : Type u1 → Type v) (ρ : Type u2)
   | tau
   | vis (α : Type u1) (e : ε α)
 
-def ITree.children.{u1, v, u2} {ε : Type u1 → Type v} {ρ : Type u2}
+abbrev ITree.children.{u1, v, u2} {ε : Type u1 → Type v} {ρ : Type u2}
   : ITree.shape ε ρ → Type u1
   | .ret _   => ULift (Fin2 0)
   | .tau     => ULift (Fin2 1)
   | .vis α _ => α
 
-def ITree.P.{u1, v, u2} (ε : Type u1 → Type v) (ρ : Type u2) : PFunctor :=
+abbrev ITree.P.{u1, v, u2} (ε : Type u1 → Type v) (ρ : Type u2) : PFunctor :=
   ⟨ITree.shape.{u1, v, u2} ε ρ, ITree.children.{u1, v, u2}⟩
 
 /--
@@ -27,7 +27,7 @@ coinductive ITree (ε : Type → Type) (ρ : Type)
 | vis {α : Type} (e : ε α) (k : α → ITree ε ρ)
 ```
 -/
-def ITree.{u1, v, u2} (ε : Type u1 → Type v) (ρ : Type u2) :=
+abbrev ITree.{u1, v, u2} (ε : Type u1 → Type v) (ρ : Type u2) :=
   (ITree.P ε ρ).M
 
 abbrev KTree.{u1, v, u2} (ε : Type u1 → Type v) (α : Type u1) (β : Type u2) :=
@@ -104,7 +104,6 @@ theorem vis_inj {ε α ρ}
   · have := eq_of_heq this.right
     funext x
     have := congr (a₁ := x) this rfl
-    simp only at this
     exact this
 
 theorem tau_inj {ε ρ} {t1 t2 : ITree ε ρ} (h : tau t1 = tau t2) : t1 = t2 := by
@@ -123,8 +122,7 @@ def dMatchOn {motive : ITree ε ρ → Sort u} (x : ITree ε ρ)
     ret v (by
       rw [elim0_eq_all snd] at hm
       simp only [ITree.ret, ret']
-      rw [←hm]
-      simp only [PFunctor.M.mk_dest]
+      exact (PFunctor.M.mk_dest x).symm.trans (congrArg PFunctor.M.mk hm)
     )
   | ⟨.tau, c⟩ =>
     tau (c 0) (by
@@ -139,8 +137,7 @@ def dMatchOn {motive : ITree ε ρ → Sort u} (x : ITree ε ρ)
   | ⟨.vis α e, k⟩ =>
     vis α e k (by
       simp only [ITree.vis, vis']
-      rw [←hm]
-      simp only [PFunctor.M.mk_dest]
+      exact (PFunctor.M.mk_dest x).symm.trans (congrArg PFunctor.M.mk hm)
     )
 
 /- Destructor utilities -/
@@ -156,15 +153,15 @@ theorem dest_vis {ε α ρ} {e : ε α} {k : KTree ε α ρ}
 
 /-- Infinite Taus -/
 def infTau : ITree ε ρ :=
-  PFunctor.M.corec' (fun rec x =>
-    .inr <| ITree.tau' (rec x)
+  PFunctor.M.corecEmbed (fun x =>
+    .inr <| ITree.tau' (.inr x)
   ) ()
 
 theorem infTau_eq : @infTau ε ρ = tau infTau := by
   conv =>
     lhs
     simp [infTau]
-  rw [PFunctor.M.unfold_corec']
+  rw [PFunctor.M.unfold_corecEmbed]
   simp only [tau, tau']
   congr; funext i
   match i with
@@ -206,9 +203,9 @@ macro "itree_elim " h:term : tactic => `(tactic|(
 ))
 
 /--
-`prove_unfold_lemma` tries to finish a proof of an unfolding lemma defined by `corec'`
-Note you have to first unfold `corec'` in the appropriate places,
-possibly by some combination of `conv` and `rw [PFunctor.M.unfold_corec']`.
+`prove_unfold_lemma` tries to finish a proof of an unfolding lemma defined by `corecEmbed`.
+Note you have to first unfold `corecEmbed` in the appropriate places,
+possibly by some combination of `conv` and `rw [PFunctor.M.unfold_corecEmbed]`.
 -/
 macro "prove_unfold_lemma" : tactic => `(tactic|(
   (try simp only [dest_ret, dest_vis, dest_tau]) <;>
@@ -249,11 +246,43 @@ theorem IEqF_monotone sim sim' (hsim : ∀ (t1 t2 : ITree ε ρ), sim t1 t2 → 
   cases h <;> constructor <;> intros <;> apply hsim <;> try assumption
   rename_i h _; apply h
 
-/-- Custom equality predicate between ITrees -/
-def IEq (t1 t2 : ITree ε ρ) : Prop :=
-  IEqF IEq t1 t2
-  coinductive_fixpoint monotonicity fun sim' sim hsim =>
-    IEqF_monotone sim sim' hsim
+/-- The bisimulation operator, ordered by reverse implication so that its
+least fixed point is the desired greatest predicate fixed point. -/
+def IEqOp (sim : ITree ε ρ → ITree ε ρ → Lean.Order.ReverseImplicationOrder) :
+    ITree ε ρ → ITree ε ρ → Lean.Order.ReverseImplicationOrder :=
+  fun t₁ t₂ => IEqF sim t₁ t₂
+
+theorem IEqOp_monotone : Lean.Order.monotone (@IEqOp ε ρ) := by
+  intro sim sim' hsim t₁ t₂ h
+  exact IEqF_monotone sim' sim (fun a b => hsim a b) t₁ t₂ h
+
+/-- Forget the order carried by a reverse-implication proposition. Keeping
+this conversion opaque avoids confusing the ordinary and reversed `Prop`
+complete-lattice instances during elaboration. -/
+def reverseToProp (p : Lean.Order.ReverseImplicationOrder) : Prop := p
+
+/-- Custom equality predicate between ITrees. -/
+noncomputable def IEq (t1 t2 : ITree ε ρ) : Prop :=
+  reverseToProp (Lean.Order.lfp_monotone (@IEqOp ε ρ) IEqOp_monotone t1 t2)
+
+theorem IEq_unfold (t₁ t₂ : ITree ε ρ) : IEq t₁ t₂ ↔ IEqF IEq t₁ t₂ := by
+  unfold IEq reverseToProp
+  delta Lean.Order.lfp_monotone
+  conv_lhs => rw [Lean.Order.lfp_fix IEqOp_monotone]
+  rfl
+
+theorem IEq_coinduct (R : ITree ε ρ → ITree ε ρ → Prop)
+    (hstep : ∀ t₁ t₂, R t₁ t₂ → IEqF R t₁ t₂) :
+    ∀ t₁ t₂, R t₁ t₂ → IEq t₁ t₂ := by
+  have hpost : Lean.Order.PartialOrder.rel
+      (@IEqOp ε ρ (fun t₁ t₂ => (R t₁ t₂ : Lean.Order.ReverseImplicationOrder)))
+      (fun t₁ t₂ => (R t₁ t₂ : Lean.Order.ReverseImplicationOrder)) := by
+    change ∀ t₁ t₂, R t₁ t₂ → IEqF R t₁ t₂
+    exact hstep
+  have hlfp := Lean.Order.lfp_le_of_le hpost
+  intro t₁ t₂ hR
+  unfold IEq reverseToProp
+  exact hlfp t₁ t₂ hR
 
 theorem ieq_iff_eq (t1 t2 : ITree ε ρ) : IEq t1 t2 ↔ t1 = t2 := by
   constructor
@@ -262,7 +291,7 @@ theorem ieq_iff_eq (t1 t2 : ITree ε ρ) : IEq t1 t2 ↔ t1 = t2 := by
     intro t1; apply ITree.dMatchOn (x := t1)
     <;> (
       intros; rename_i h1 t2 heq
-      simp only [IEq] at heq
+      rw [IEq_unfold] at heq
       cases heq <;> itree_elim h1
       subst_itree_inj h1
       simp_itree_basic
@@ -272,15 +301,32 @@ theorem ieq_iff_eq (t1 t2 : ITree ε ρ) : IEq t1 t2 ↔ t1 = t2 := by
     exists .ret v, elim0, elim0
     simp only [true_and]; intro i; exact elim0 i
   · intro h; subst h
-    apply IEq.coinduct Eq _
-    · rfl
-    · intro t1
-      apply t1.dMatchOn <;> grind
+    unfold IEq
+    have hpost : Lean.Order.PartialOrder.rel (@IEqOp ε ρ Eq) Eq := by
+      change ∀ s₁ s₂, s₁ = s₂ → IEqF Eq s₁ s₂
+      intro s₁ s₂ hEq
+      subst hEq
+      apply s₁.dMatchOn <;> grind
+    exact Lean.Order.lfp_le_of_le hpost t1 t1 rfl
+
+theorem eq_of_bisim_state {S : Type u} (lhs rhs : S → ITree ε ρ)
+    (hstep : ∀ s, IEqF (fun t₁ t₂ => t₁ = t₂ ∨ ∃ s, t₁ = lhs s ∧ t₂ = rhs s)
+      (lhs s) (rhs s))
+    (s : S) : lhs s = rhs s := by
+  rw [← ieq_iff_eq]
+  apply IEq_coinduct (fun t₁ t₂ => t₁ = t₂ ∨ ∃ s, t₁ = lhs s ∧ t₂ = rhs s)
+  · rintro t₁ t₂ (rfl | ⟨s, rfl, rfl⟩)
+    · apply t₁.dMatchOn
+      · intros; rename_i h; subst h; constructor
+      · intros; rename_i h; subst h; constructor; exact Or.inl rfl
+      · intros; rename_i h; subst h; constructor; intro; exact Or.inl rfl
+    · exact hstep s
+  · exact Or.inr ⟨s, rfl, rfl⟩
 
 @[refl]
 theorem ieq_rfl {sim} {hsim : ∀ t1 t2, IEq t1 t2 → sim t1 t2} (t : ITree ε ρ) : IEqF sim t t := by
   apply IEqF_monotone <;> try assumption
-  rw [← IEq, ieq_iff_eq]
+  rw [← IEq_unfold, ieq_iff_eq]
 end
 
 end ITree

@@ -18,8 +18,8 @@
       "owner": "leanprover-community",
       "repo": "mathlib4",
       "version": "4.34.0",
-      "rev": "11246f19213a5a83fdb295532d1d72b4d51a34ea",
-      "hash": "sha256-EAbOBGGIXD+5LYkEgaD616c/s30noTt784FvWs/owJE="
+      "rev": "5ed2965256430c3649e86755f9576b54eca72435",
+      "hash": "sha256-hhhfTEvpw6UyA0z1KO6Skv8Ao8XqfEw41gihG1i5M0k="
     },
     "plausible": {
       "owner": "leanprover-community",

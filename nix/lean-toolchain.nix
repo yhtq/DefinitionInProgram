@@ -37,10 +37,18 @@ let
     src = fetchSource metadata.lean;
     mimalloc-src = mimallocSource;
     buildInputs = (_old.buildInputs or [ ]) ++ [ pkgs.openssl ];
-    cmakeFlags = (_old.cmakeFlags or [ ]) ++ [
-      # CMake maps IPO to the platform compiler's LTO implementation.
-      "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
-    ];
+    cmakeFlags =
+      (_old.cmakeFlags or [ ])
+      ++ [ "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON" ]
+      ++ lib.optionals pkgs.stdenv.cc.isGNU [
+        # Nix's CMake hook selects plain Binutils by default. Build indexed,
+        # fat GCC LTO archives: Lean's own links still optimize the IR, while
+        # downstream Lake executables can consume the native fallback without
+        # having to enable LTO or use an exactly matching compiler plugin.
+        "-DCMAKE_AR=${pkgs.stdenv.cc.cc}/bin/gcc-ar"
+        "-DCMAKE_RANLIB=${pkgs.stdenv.cc.cc}/bin/gcc-ranlib"
+        "-DCMAKE_NM=${pkgs.stdenv.cc.cc}/bin/gcc-nm"
+      ];
 
     # Lean 4.34 added GIT_BRANCH and a default SOURCE_DIR to the mimalloc
     # FetchContent declaration. The nixpkgs patch still handles the vendored
@@ -54,6 +62,19 @@ let
           --replace-fail 'set(GIT_SHA1 "")' 'set(GIT_SHA1 "${metadata.lean.tag}")'
 
         rm -rf src/lake/examples/git/
+
+        for file in stage0/src/CMakeLists.txt src/CMakeLists.txt; do
+          substituteInPlace "$file" \
+            --replace-fail \
+              'project(LEAN CXX C)' \
+              'project(LEAN CXX C)
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+          foreach(lang C CXX)
+            list(REMOVE_ITEM CMAKE_''${lang}_COMPILE_OPTIONS_IPO -fno-fat-lto-objects)
+            list(APPEND CMAKE_''${lang}_COMPILE_OPTIONS_IPO -ffat-lto-objects)
+          endforeach()
+        endif()'
+        done
 
         sed -i \
           -e '/GIT_BRANCH dev3/d' \
