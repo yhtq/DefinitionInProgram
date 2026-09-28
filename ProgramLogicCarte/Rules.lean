@@ -1,5 +1,6 @@
 import ITree.UpToTaus
 import ITree.Translate
+import ITree.Recursion
 import ProgramLogicCarte.Handler
 import ProgramLogicCarte.Trace
 import ProgramLogicCarte.Void
@@ -14,8 +15,11 @@ import ProgramLogicCarte.Threadpool
 import ProgramLogicCarte.Heap
 import ProgramLogicCarte.Interpreter
 import ProgramLogicCarte.ExampleLang.Syntax
+import ProgramLogicCarte.ExampleLang.Heap
 import ProgramLogicCarte.ExampleLang.Pure
 import ProgramLogicCarte.ExampleLang.Fuel
+import ProgramLogicCarte.ExampleLang.Compile
+import ProgramLogicCarte.ExampleLang.ProgramLogic
 
 /-!
 # Program Logics à la Carte

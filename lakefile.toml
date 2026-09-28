@@ -33,6 +33,10 @@ globs = ["ProgramLogicCarte", "ProgramLogicCarte.+"]
 name = "DefinitionInProgramLib"
 globs = ["DefintionInProgram.+"]
 
+[[lean_lib]]
+name = "IrisTutorial"
+globs = ["IrisTutorial", "IrisTutorial.+"]
+
 [[lean_exe]]
 name = "DefintionInProgram"
 root = "Main"

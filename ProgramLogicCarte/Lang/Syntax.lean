@@ -7,7 +7,7 @@ small examples exercise real source programs while those larger back ends are
 translated incrementally.
 -/
 
-namespace ProgramLogicCarte.ExampleLang
+namespace ProgramLogicCarte.Lang
 
 inductive BaseLit where
   | int (value : Int)
@@ -31,7 +31,7 @@ mutual
     | load (address : Expr)
     | store (address value : Expr)
     | pickInt
-    | spawn (body : Expr)
+    | next
   deriving DecidableEq, Repr
 
   inductive Value where
@@ -56,7 +56,7 @@ def subst (name : String) (replacement : Value) : Expr → Expr
   | .load address => .load (subst name replacement address)
   | .store address value => .store (subst name replacement address) (subst name replacement value)
   | .pickInt => .pickInt
-  | .spawn body => .spawn (subst name replacement body)
+  | .next => .next
 
 def substBinder (binder : Binder) (replacement : Value) : Expr → Expr
   | body => match binder with
@@ -86,4 +86,4 @@ theorem subst_named (name : String) (replacement : Value) (body : Expr) :
     substBinder (.named name) replacement body = subst name replacement body :=
   rfl
 
-end ProgramLogicCarte.ExampleLang
+end ProgramLogicCarte.Lang

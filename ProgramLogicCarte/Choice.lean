@@ -60,6 +60,28 @@ theorem wpi_demonicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
   ispecialize HAll $$ %x
   iexact HAll
 
+/-- Demonic choice is valid under any invariant mask. -/
+theorem wpiMask_demonicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
+    (mask : CoPset) (α : Type u) [Inhabited α] (Φ : α → IProp GF) :
+    iprop(∀ x, Φ x) ⊢ wpiMask demonicH mask (demonicChoice α) Φ := by
+  rw [wpiMask]
+  istart
+  iintro HAll
+  iapply fupd_mask_intro Std.LawfulSet.empty_subset
+  iintro Hclose
+  rw [demonicChoice, trigger, wpi_vis]
+  imodintro
+  isimp only [demonicH]
+  iintro %x
+  rw [wpi_ret]
+  imodintro
+  iapply (fupd_wand_left (P := (emp : IProp GF)))
+  isplitl [HAll]
+  · iintro _
+    ispecialize HAll $$ %x
+    iexact HAll
+  · iexact Hclose
+
 /-- One-layer unfolding relation for a concrete resolution of demonic
 choices. A demonic event chooses one branch and takes a silent step. -/
 inductive DemonicIrelF {ε : Type u → Type (u + 1)} {ρ : Type*}

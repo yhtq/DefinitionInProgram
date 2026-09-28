@@ -45,7 +45,7 @@ def spawn {ε : Type u → Type u} (inject : ThreadpoolE ⟶ ε) (child : ITree 
 def threadpoolH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF ThreadpoolE where
   handle e Φ spawned := match e with
     | .fork => iprop(Φ .current ∗ spawned .spawned)
-    | .yield => iprop(|={∅}=> Φ (.up ()))
+    | .yield => iprop(|={∅, ⊤}=> |={⊤, ∅}=> Φ (.up ()))
     | .kill => iprop(|={∅, ⊤}=> True)
   mono e := by
     cases e with
@@ -64,12 +64,19 @@ def threadpoolH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF Threadp
       intro Φ Φ' spawned spawned'
       change ⊢ iprop(
         (∀ x, Φ x -∗ Φ' x) -∗ □ (∀ x, spawned x -∗ spawned' x) -∗
-        (|={∅}=> Φ (.up ())) -∗ |={∅}=> Φ' (.up ()))
+        (|={∅, ⊤}=> |={⊤, ∅}=> Φ (.up ())) -∗ |={∅, ⊤}=> |={⊤, ∅}=> Φ' (.up ()))
       istart
       iintro HΦ _ H
-      imod H with H
-      imodintro
-      iapply HΦ $$ H
+      iapply fupd_wand_left
+      isplitl [HΦ]
+      · iintro Hinner
+        iapply fupd_wand_left
+        isplitl [HΦ]
+        · iintro Hvalue
+          iapply HΦ
+          iexact Hvalue
+        · iexact Hinner
+      · iexact H
     | kill =>
       intro Φ Φ' spawned spawned'
       change ⊢ iprop(
@@ -82,7 +89,28 @@ def threadpoolH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF Threadp
     intro n α e Φ₁ Φ₂ spawned₁ spawned₂ hΦ hspawned
     cases e with
     | fork => exact BI.sep_ne.ne (hΦ .current) (hspawned .spawned)
-    | yield => exact fupd_ne.ne (hΦ (.up ()))
+    | yield => exact fupd_ne.ne (fupd_ne.ne (hΦ (.up ())))
     | kill => exact .rfl
+
+/-- Yield can be proved when the full invariant mask is available. -/
+theorem wpi_mask_yield {GF : BundledGFunctors} [InvGS_gen hlc GF]
+    (Φ : ULift Unit → IProp GF) :
+    Φ (.up ()) ⊢ wpiMask threadpoolH ⊤ (yield (fun e => e)) Φ := by
+  rw [wpiMask]
+  istart
+  iintro HΦ
+  iapply fupd_mask_intro Std.LawfulSet.empty_subset
+  iintro Hclose
+  rw [yield, trigger, wpi_vis]
+  imodintro
+  isimp only [threadpoolH]
+  iapply (fupd_wand_left (P := (emp : IProp GF)))
+  isplitl [HΦ]
+  · iintro _
+    rw [wpi_ret]
+    iapply (fupd_mono (fupd_intro (E := (∅ : CoPset))))
+    iapply fupd_mask_intro_subseteq Std.LawfulSet.empty_subset
+    iexact HΦ
+  · iexact Hclose
 
 end ProgramLogicCarte

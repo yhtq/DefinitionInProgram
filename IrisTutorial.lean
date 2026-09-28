@@ -1,0 +1,12 @@
+import IrisTutorial.Programs
+import IrisTutorial.Exercise02List
+import IrisTutorial.Exercises.Ex01Swap
+import IrisTutorial.Exercises.Ex02SumList
+import IrisTutorial.Exercises.Ex03SpinLock
+import IrisTutorial.Exercises.Ex04ParallelAdd
+import IrisTutorial.Exercises.Ex05ParallelAddMul
+import IrisTutorial.Solutions.Ex01Swap
+import IrisTutorial.Solutions.Ex02SumList
+import IrisTutorial.Solutions.Ex03SpinLock
+import IrisTutorial.Solutions.Ex04ParallelAdd
+import IrisTutorial.Solutions.Ex05ParallelAddMul

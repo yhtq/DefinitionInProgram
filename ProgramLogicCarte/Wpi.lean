@@ -119,6 +119,12 @@ def wpi {GF : BundledGFunctors} [InvGS_gen hlc GF]
     (t : ITree ε ρ) (Φ : ρ → IProp GF) : IProp GF :=
   bi_least_fixpoint (wpiF' H) (⟨t⟩, Φ)
 
+example : BI (IProp GF) := inferInstance
+
+/-- Hoare triple for an interaction tree under handler `H`. -/
+macro:25 "{{{" P:term "}}}" t:term "@@" H:term "{{{" Q:term "}}}" : term =>
+  `(iprop($P -∗ wpi $H $t $Q))
+
 instance wpi_ne {GF : BundledGFunctors} [InvGS_gen hlc GF]
     {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
     (t : ITree ε ρ) : NonExpansive (wpi H t) where
@@ -180,6 +186,25 @@ theorem wpi_vis {GF : BundledGFunctors} [InvGS_gen hlc GF]
         (fun a => fupd ⊤ ∅ (wpi H (k a) (fun _ => iprop(False))))) := by
   rw [wpi_unfold]
   rfl
+
+/-- Masked weakest precondition from Coq `wpi_mask`: open the chosen mask
+before executing the empty-mask tree, and restore it for the postcondition. -/
+def wpiMask {GF : BundledGFunctors} [InvGS_gen hlc GF]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
+    (mask : CoPset) (t : ITree ε ρ) (Φ : ρ → IProp GF) : IProp GF :=
+  iprop(|={mask, ∅}=> wpi H t (fun result => iprop(|={∅, mask}=> Φ result)))
+
+/-- Returning a value is valid under any invariant mask. -/
+theorem wpiMask_ret {GF : BundledGFunctors} [InvGS_gen hlc GF]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
+    (mask : CoPset) (value : ρ) (Φ : ρ → IProp GF) :
+    Φ value ⊢ wpiMask H mask (ret value) Φ := by
+  rw [wpiMask, wpi_ret]
+  istart
+  iintro HΦ
+  iapply (fupd_mono (fupd_intro (E := (∅ : CoPset))))
+  iapply fupd_mask_intro_subseteq Std.LawfulSet.empty_subset
+  iexact HΦ
 
 /-- Iteration principle for `wpi`, directly exposing least-fixed-point
 iteration on the uncurried state space. -/
