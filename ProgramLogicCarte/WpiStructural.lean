@@ -5,17 +5,17 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI Iris.OFE ITree
 
-universe u v uρ
+universe u v uρ w
 
-private def wpiWandPred {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (state : WpiState GF ε ρ) : IProp GF :=
-  iprop(∀ Ψ : ρ → IProp GF,
+private def wpiWandPred {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (state : WpiState PROP ε ρ) : PROP :=
+  iprop(∀ Ψ : ρ → PROP,
     (∀ r : ρ, (|={∅}=> state.2 r) -∗ (|={∅}=> Ψ r)) -∗
       wpi H state.1.car Ψ)
 
-private instance wpiWandPred_ne {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε) :
+private instance wpiWandPred_ne {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε) :
     NonExpansive (wpiWandPred (ρ := ρ) H) where
   ne := by
     intro n state₁ state₂ hstate
@@ -33,13 +33,13 @@ private theorem fin1Const_zero {α : Type*} (value : α) :
   rfl
 
 /-- General postcondition strengthening at the empty execution mask. -/
-theorem wpi_upd_wand {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (t : ITree ε ρ) (Φ Ψ : ρ → IProp GF) :
+theorem wpi_upd_wand {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ Ψ : ρ → PROP) :
     ⊢ iprop((∀ r, (|={∅}=> Φ r) -∗ (|={∅}=> Ψ r)) -∗
       wpi H t Φ -∗ wpi H t Ψ) := by
   iintro Hwand Hwp
-  ihave Hgen : iprop(∀ state : WpiState GF ε ρ,
+  ihave Hgen : iprop(∀ state : WpiState PROP ε ρ,
       wpi H state.1.car state.2 -∗ wpiWandPred H state) $$ []
   · iapply (wpi_iter H (wpiWandPred (ρ := ρ) H))
     iintro !> %state HF
@@ -100,9 +100,9 @@ theorem wpi_upd_wand {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iapply Hgen $$ Hwand
 
 /-- The usual WPi consequence rule. -/
-theorem wpi_wand {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (t : ITree ε ρ) (Φ Ψ : ρ → IProp GF) :
+theorem wpi_wand {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ Ψ : ρ → PROP) :
     ⊢ iprop((∀ r, Φ r -∗ Ψ r) -∗ wpi H t Φ -∗ wpi H t Ψ) := by
   iintro Hwand Hwp
   iapply (wpi_upd_wand H t Φ Ψ) $$ [Hwand] Hwp
@@ -113,9 +113,9 @@ theorem wpi_wand {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iapply Hwand $$ Hupd
 
 /-- Consequence for the Coq-style masked WPi. -/
-theorem wpiMask_wand {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (mask : CoPset) (t : ITree ε ρ) (Φ Ψ : ρ → IProp GF) :
+theorem wpiMask_wand {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (mask : CoPset) (t : ITree ε ρ) (Φ Ψ : ρ → PROP) :
     ⊢ iprop((∀ r, Φ r -∗ Ψ r) -∗
       wpiMask H mask t Φ -∗ wpiMask H mask t Ψ) := by
   iintro Hwand Hwp

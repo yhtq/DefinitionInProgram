@@ -13,7 +13,7 @@ namespace ProgramLogicCarte.Examples
 open Iris Iris.BI ITree
 open ExampleLang
 
-universe u
+universe u w
 
 /-- A concrete nondeterministic program.  The event records `0` as the
 default resolution, so `demonicIfn` deterministically returns `1`. -/
@@ -94,34 +94,34 @@ example : runVoid 1 (ubIfn badStop) = some (.inr .crash : Sum Nat UbCrash) := by
     rw [ubIfn_crash]]
   exact runVoid_ret 0 _
 
-example {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (α : Type u) [Inhabited α] (Φ : α → IProp GF) :
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (α : Type u) [Inhabited α] (Φ : α → PROP) :
     iprop(∀ x, Φ x) ⊢ wpi demonicH (demonicChoice α) Φ :=
   wpi_demonicChoice α Φ
 
-example {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (α : Type u) (chosen : α) (Φ : α → IProp GF) :
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (α : Type u) (chosen : α) (Φ : α → PROP) :
     Φ chosen ⊢ wpi angelicH (angelicChoice α) Φ :=
   wpi_angelicChoice α chosen Φ
 
-example {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (m : LaterModality) (Φ : ULift Unit → IProp GF) :
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (m : LaterModality) (Φ : ULift Unit → PROP) :
     lat m (fupd ∅ ∅ (Φ (.up ()))) ⊢
       wpi (stepH m) (step (fun e => e)) Φ :=
   wpi_step m Φ
 
-example {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {S : Type u} [StateInterp GF S] (Φ : S → IProp GF) :
-    iprop(∀ s, interp (GF := GF) (S := S) s ={∅}=∗
-      interp (GF := GF) (S := S) s ∗ Φ s) ⊢
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {S : Type u} [StateInterp PROP S] (Φ : S → PROP) :
+    iprop(∀ s, interp (PROP := PROP) (S := S) s ={∅}=∗
+      interp (PROP := PROP) (S := S) s ∗ Φ s) ⊢
       wpi (stateH S) (getState (fun e => e)) Φ :=
   wpi_getState Φ
 
-example {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {S : Type u} [StateInterp GF S] (next : S)
-    (Φ : ULift Unit → IProp GF) :
-    iprop(∀ s, interp (GF := GF) (S := S) s ={∅}=∗
-      interp (GF := GF) (S := S) next ∗ Φ (.up ())) ⊢
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {S : Type u} [StateInterp PROP S] (next : S)
+    (Φ : ULift Unit → PROP) :
+    iprop(∀ s, interp (PROP := PROP) (S := S) s ={∅}=∗
+      interp (PROP := PROP) (S := S) next ∗ Φ (.up ())) ⊢
       wpi (stateH S) (setState (fun e => e) next) Φ :=
   wpi_setState next Φ
 

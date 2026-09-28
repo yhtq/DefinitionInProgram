@@ -5,8 +5,10 @@ import ProgramLogicCarte.WpiStructural
 namespace ProgramLogicCarte.Lang
 open Iris Iris.BI Iris.OFE ITree
 
-def exampleH {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF (ExampleHeap)] : IHandler GF ExampleE where
+universe w
+
+def exampleH {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP (ExampleHeap)] : IHandlerBase PROP ExampleE where
   handle e Φ spawned := match e with
     | .undefined event => ubH.handle event Φ spawned
     | .heap event => (stateH (ExampleHeap)).handle event Φ spawned
@@ -24,15 +26,15 @@ def exampleH {GF : BundledGFunctors} [InvGS_gen hlc GF]
     | demonic event => exact demonicH.ne event hΦ hspawned
 
 /-- Exact masked ExampleLang WP used by Coq `wp_example`. -/
-def wpExampleMask {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (expr : Expr)
-    (Φ : Value → IProp GF) : IProp GF :=
+def wpExampleMask {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (expr : Expr)
+    (Φ : Value → PROP) : PROP :=
   wpiMask exampleH mask (compileExpr expr) Φ
 
 /-- Coq's value rule holds under any mask. -/
-theorem wp_mask_val {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (value : Value)
-    (Φ : Value → IProp GF) :
+theorem wp_mask_val {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (value : Value)
+    (Φ : Value → PROP) :
     Φ value ⊢ wpExampleMask mask (.val value) Φ := by
   rw [wpExampleMask, compileExpr_val, wpiMask, wpi_ret]
   istart
@@ -42,17 +44,17 @@ theorem wp_mask_val {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact H
 
 /-- Coq's `wp_wand` for the masked ExampleLang WP. -/
-theorem wp_mask_wand {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (expr : Expr)
-    (Φ Ψ : Value → IProp GF) :
+theorem wp_mask_wand {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (expr : Expr)
+    (Φ Ψ : Value → PROP) :
     ⊢ iprop((∀ value, Φ value -∗ Ψ value) -∗
       wpExampleMask mask expr Φ -∗ wpExampleMask mask expr Ψ) := by
   exact wpiMask_wand exampleH mask (compileExpr expr) Φ Ψ
 
 /-- Coq's `wp_frame` for the masked ExampleLang WP. -/
-theorem wp_mask_frame {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (P : IProp GF) (mask : CoPset)
-    (expr : Expr) (Φ : Value → IProp GF) :
+theorem wp_mask_frame {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (P : PROP) (mask : CoPset)
+    (expr : Expr) (Φ : Value → PROP) :
     ⊢ iprop(P -∗ wpExampleMask mask expr Φ -∗
       wpExampleMask mask expr (fun value => iprop(P ∗ Φ value))) := by
   iintro HP Hwp
@@ -61,17 +63,17 @@ theorem wp_mask_frame {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iframe
 
 /-- A source lambda is a value under every invariant mask. -/
-theorem wp_mask_lam {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset)
-    (binder : Binder) (body : Expr) (Φ : Value → IProp GF) :
+theorem wp_mask_lam {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset)
+    (binder : Binder) (body : Expr) (Φ : Value → PROP) :
     Φ (.lam binder body) ⊢ wpExampleMask mask (.lam binder body) Φ := by
   rw [wpExampleMask, compileExpr_lam]
   exact wpiMask_ret exampleH mask (.lam binder body) Φ
 
 /-- Closed integer addition has the same masked WP as its result. -/
-theorem wp_mask_plus {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (left right : Int)
-    (Φ : Value → IProp GF) :
+theorem wp_mask_plus {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (left right : Int)
+    (Φ : Value → PROP) :
     Φ (.lit (.int (left + right))) ⊢
       wpExampleMask mask
         (.plus (.val (.lit (.int left))) (.val (.lit (.int right)))) Φ := by
@@ -79,9 +81,9 @@ theorem wp_mask_plus {GF : BundledGFunctors} [InvGS_gen hlc GF]
     wp_mask_val mask (.lit (.int (left + right))) Φ
 
 /-- Closed conditional selection is valid under every mask. -/
-theorem wp_mask_if_values {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (test : Int)
-    (yes no : Value) (Φ : Value → IProp GF) :
+theorem wp_mask_if_values {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (test : Int)
+    (yes no : Value) (Φ : Value → PROP) :
     Φ (if test = 0 then no else yes) ⊢
       wpExampleMask mask (.ite (.val (.lit (.int test))) (.val yes) (.val no)) Φ := by
   simpa only [wpExampleMask, compileExpr_val, compileExpr_if_values] using
@@ -89,9 +91,9 @@ theorem wp_mask_if_values {GF : BundledGFunctors} [InvGS_gen hlc GF]
 
 /-- Closed beta reduction remains valid under every mask; its two
 administrative tau steps do not affect the masked WP. -/
-theorem wp_mask_beta {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (value : Value)
-    (Φ : Value → IProp GF) :
+theorem wp_mask_beta {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (value : Value)
+    (Φ : Value → PROP) :
     Φ value ⊢ wpExampleMask mask
       (.app (.val (.lam (.named "x") (.var "x"))) (.val value)) Φ := by
   rw [wpExampleMask, compileExpr_beta, wpiMask, ← wpi_tau, ← wpi_tau]
@@ -99,8 +101,8 @@ theorem wp_mask_beta {GF : BundledGFunctors} [InvGS_gen hlc GF]
     wp_mask_val mask value Φ
 
 /-- Coq's `wp_pick_int` rule under an arbitrary mask. -/
-theorem wp_mask_pick_int {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (mask : CoPset) (Φ : Value → IProp GF) :
+theorem wp_mask_pick_int {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (mask : CoPset) (Φ : Value → PROP) :
     iprop(∀ n : Int, Φ (.lit (.int n))) ⊢
       wpExampleMask mask .pickInt Φ := by
   rw [wpExampleMask, compileExpr_pickInt, wpiMask, wpi_vis]
@@ -113,20 +115,20 @@ theorem wp_mask_pick_int {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iintro %n
   rw [wpi_ret]
   imodintro
-  iapply (fupd_wand_left (P := (emp : IProp GF)))
+  iapply (fupd_wand_left (P := (emp : PROP)))
   isplitl [HAll]
   · iintro _
     ispecialize HAll $$ %n
     iexact HAll
   · iexact Hclose
 
-def wpExample {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF (ExampleHeap)] (expr : Expr) (Φ : Value → IProp GF) : IProp GF :=
+def wpExample {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP (ExampleHeap)] (expr : Expr) (Φ : Value → PROP) : PROP :=
   wpi exampleH (compileExpr expr) Φ
 
 /-- The source-language value rule. -/
-theorem wp_val {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF (ExampleHeap)] (value : Value) (Φ : Value → IProp GF) :
+theorem wp_val {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP (ExampleHeap)] (value : Value) (Φ : Value → PROP) :
     Φ value ⊢ wpExample (.val value) Φ := by
   rw [wpExample, compileExpr_val, wpi_ret]
   istart
@@ -135,8 +137,8 @@ theorem wp_val {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact H
 
 /-- The source-language rule for adding two integer literals. -/
-theorem wp_plus {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF (ExampleHeap)] (left right : Int) (Φ : Value → IProp GF) :
+theorem wp_plus {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP (ExampleHeap)] (left right : Int) (Φ : Value → PROP) :
     Φ (.lit (.int (left + right))) ⊢
       wpExample (.plus (.val (.lit (.int left))) (.val (.lit (.int right)))) Φ := by
   rw [wpExample, compileExpr_plus_values, wpi_ret]
@@ -146,8 +148,8 @@ theorem wp_plus {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact H
 
 /-- An application whose body is the bound variable returns its argument. -/
-theorem wp_beta {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF (ExampleHeap)] (value : Value) (Φ : Value → IProp GF) :
+theorem wp_beta {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP (ExampleHeap)] (value : Value) (Φ : Value → PROP) :
     Φ value ⊢ wpExample
       (.app (.val (.lam (.named "x") (.var "x"))) (.val value)) Φ := by
   rw [wpExample, compileExpr_beta]
@@ -158,9 +160,9 @@ theorem wp_beta {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact H
 
 /-- The source-language rule for a conditional with value branches. -/
-theorem wp_if_values {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF (ExampleHeap)] (test : Int) (yes no : Value)
-    (Φ : Value → IProp GF) :
+theorem wp_if_values {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP (ExampleHeap)] (test : Int) (yes no : Value)
+    (Φ : Value → PROP) :
     Φ (if test = 0 then no else yes) ⊢
       wpExample (.ite (.val (.lit (.int test))) (.val yes) (.val no)) Φ := by
   rw [wpExample, compileExpr_if_values, wpi_ret]
@@ -170,8 +172,8 @@ theorem wp_if_values {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact H
 
 /-- Demonically chosen integers require the postcondition for every integer. -/
-theorem wp_pick_int {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    [StateInterp GF ExampleHeap] (Φ : Value → IProp GF) :
+theorem wp_pick_int {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    [StateInterp PROP ExampleHeap] (Φ : Value → PROP) :
     iprop(∀ n : Int, Φ (.lit (.int n))) ⊢ wpExample .pickInt Φ := by
   rw [wpExample, compileExpr_pickInt, wpi_vis]
   istart

@@ -13,7 +13,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI Iris.OFE ITree
 
-universe u uρ
+universe u uρ w
 
 inductive StepE : Type u → Type u where
   | step : StepE (ULift Unit)
@@ -26,22 +26,22 @@ inductive LaterModality where
   | later
 deriving DecidableEq
 
-def lat {GF : BundledGFunctors} : LaterModality → IProp GF → IProp GF
+def lat {PROP : Type w} [BI PROP] : LaterModality → PROP → PROP
   | .identity, P => P
   | .later, P => iprop(▷ P)
 
-theorem lat_ne {GF : BundledGFunctors} {n : Nat} (m : LaterModality)
-    {P Q : IProp GF} (h : P ≡{n}≡ Q) : lat m P ≡{n}≡ lat m Q := by
+theorem lat_ne {PROP : Type w} [BI PROP] {n : Nat} (m : LaterModality)
+    {P Q : PROP} (h : P ≡{n}≡ Q) : lat m P ≡{n}≡ lat m Q := by
   cases m with
   | identity => exact h
   | later => exact later_ne.ne h
 
-def stepHandle {GF : BundledGFunctors} (m : LaterModality)
-    {α : Type u} (e : StepE α) (Φ : α → IProp GF) : IProp GF :=
+def stepHandle {PROP : Type w} [BI PROP] (m : LaterModality)
+    {α : Type u} (e : StepE α) (Φ : α → PROP) : PROP :=
   match e with
   | .step => lat m (Φ (.up ()))
 
-def stepH {GF : BundledGFunctors} (m : LaterModality) : IHandler GF StepE where
+def stepH {PROP : Type w} [BI PROP] (m : LaterModality) : IHandlerBase PROP StepE where
   handle e Φ _ := stepHandle m e Φ
   mono e := by
     cases e
@@ -63,15 +63,15 @@ def stepH {GF : BundledGFunctors} (m : LaterModality) : IHandler GF StepE where
     cases e
     exact lat_ne m (hΦ (.up ()))
 
-instance stepHSequential {GF : BundledGFunctors} (m : LaterModality) :
-    IHandler.Sequential (stepH (GF := GF) m) where
+instance stepHSequential {PROP : Type w} [BI PROP] (m : LaterModality) :
+    IHandler.Sequential (stepH (PROP := PROP) m) where
   sequential e Φ spawned := by
     cases e
     exact .rfl
 
 /-- Empty-mask WP rule for one logical step. -/
-theorem wpi_step {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (m : LaterModality) (Φ : ULift Unit → IProp GF) :
+theorem wpi_step {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (m : LaterModality) (Φ : ULift Unit → PROP) :
     lat m (fupd ∅ ∅ (Φ (.up ()))) ⊢ wpi (stepH m) (step (fun e => e)) Φ := by
   rw [step, trigger, wpi_vis]
   istart

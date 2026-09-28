@@ -184,16 +184,39 @@
               pkgs.writeShellApplication {
                 name = "unmount-lake-deps";
                 runtimeInputs = [
+                  pkgs.coreutils
                   pkgs.fuse3
                   pkgs.util-linux
                 ];
                 text = ''
+                  if [ ! -f flake.nix ] || [ ! -f lake-manifest.json ]; then
+                    echo "Run this command from the DefintionInProgram project root." >&2
+                    exit 1
+                  fi
+
+                  # On NixOS the setuid FUSE helper lives here; the one from
+                  # pkgs.fuse3 cannot unmount a user mount without privileges.
+                  export PATH=/run/wrappers/bin:$PATH
                   for package in mathlib plausible LeanSearchClient importGraph proofwidgets aesop Qq batteries Cli; do
                     mountpoint=".lake/packages/$package"
                     if mountpoint -q "$mountpoint"; then
                       fusermount3 -u "$mountpoint"
                     fi
                   done
+
+                  if [ -d .lake/packages ]; then
+                    packages_dir="$(realpath .lake/packages)"
+                    while IFS= read -r target; do
+                      case "$target" in
+                        "$packages_dir"|"$packages_dir"/*)
+                          echo "Still mounted under .lake/packages: $target" >&2
+                          exit 1
+                          ;;
+                      esac
+                    done < <(findmnt -rn -o TARGET)
+
+                    rm -rf --one-file-system -- .lake/packages
+                  fi
                 '';
               }
             }/bin/unmount-lake-deps";

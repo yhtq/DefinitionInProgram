@@ -13,7 +13,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI Iris.OFE ITree
 
-universe u uρ
+universe u uρ w
 
 inductive HaltE : Type u → Type u where
   | halt : HaltE (EmptyAnswer : Type u)
@@ -34,7 +34,7 @@ def assumeOrHalt {ε : Type u → Type u} (inject : HaltE ⟶ ε)
   if h : P then ret ⟨h⟩ else halt inject
 
 /-- Safe halting closes the empty invariant mask and establishes `True`. -/
-def haltH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF HaltE where
+def haltH {PROP : Type w} [BI PROP] [BIFUpdate PROP] : IHandlerBase PROP HaltE where
   handle _ _ _ := fupd ∅ ⊤ iprop(True)
   mono _ := by
     intro Φ Φ' spawned spawned'
@@ -45,8 +45,8 @@ def haltH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF HaltE where
     intro n α e Φ₁ Φ₂ spawned₁ spawned₂ hΦ hspawned
     exact .rfl
 
-instance haltHSequential {GF : BundledGFunctors} [InvGS_gen hlc GF] :
-    IHandler.Sequential (haltH : IHandler GF HaltE) where
+instance haltHSequential {PROP : Type w} [BI PROP] [BIFUpdate PROP] :
+    IHandler.Sequential (haltH : IHandlerBase PROP HaltE) where
   sequential := by
     intro α e Φ spawned
     exact .rfl

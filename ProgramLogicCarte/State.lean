@@ -7,7 +7,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI Iris.OFE ITree
 
-universe u uₑ
+universe u uₑ w
 
 /-- Stateful events. The unit answer is lifted so both constructors live in
 the same universe-polymorphic signature. -/
@@ -24,30 +24,30 @@ def setState {S : Type u} {ε : Type u → Type u} (inject : StateE S ⟶ ε)
   trigger (inject (.set value))
 
 /-- Iris assertion describing ownership of the current external state. -/
-class StateInterp (GF : BundledGFunctors) (S : Type u) where
-  interp : S → IProp GF
+class StateInterp (PROP : Type w) [BI PROP] (S : Type u) where
+  interp : S → PROP
 
 export StateInterp (interp)
 
 /-- The assertion assigned to one state event.  Kept separate from the
 `IHandler` package so dependent pattern matching reduces transparently in the
 handler laws. -/
-def stateHandle {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {S : Type u} [StateInterp GF S] {α : Type u} (e : StateE S α)
-    (Φ : α → IProp GF) : IProp GF :=
+def stateHandle {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {S : Type u} [StateInterp PROP S] {α : Type u} (e : StateE S α)
+    (Φ : α → PROP) : PROP :=
   match e with
   | .get => iprop(∀ s,
-      interp (GF := GF) (S := S) s ={∅}=∗
-        interp (GF := GF) (S := S) s ∗ Φ s)
+      interp (PROP := PROP) (S := S) s ={∅}=∗
+        interp (PROP := PROP) (S := S) s ∗ Φ s)
   | .set next => iprop(∀ s,
-      interp (GF := GF) (S := S) s ={∅}=∗
-        interp (GF := GF) (S := S) next ∗ Φ (.up ()))
+      interp (PROP := PROP) (S := S) s ={∅}=∗
+        interp (PROP := PROP) (S := S) next ∗ Φ (.up ()))
 
 /-- Logical handler for state operations.  Every operation temporarily takes
 ownership of the current state and returns ownership of the resulting state. -/
-def stateH {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (S : Type u) [StateInterp GF S] : IHandler GF (StateE S) where
-  handle e Φ _ := stateHandle (GF := GF) (S := S) e Φ
+def stateH {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (S : Type u) [StateInterp PROP S] : IHandlerBase PROP (StateE S) where
+  handle e Φ _ := stateHandle (PROP := PROP) (S := S) e Φ
   mono e := by
     cases e with
     | get =>
@@ -82,17 +82,17 @@ def stateH {GF : BundledGFunctors} [InvGS_gen hlc GF]
         exact forall_ne fun s => wand_ne.ne .rfl <|
           BIFUpdate.ne.ne <| sep_ne.ne .rfl (hΦ (.up ()))
 
-instance stateHSequential {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (S : Type u) [StateInterp GF S] :
-    IHandler.Sequential (stateH (GF := GF) S) where
+instance stateHSequential {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (S : Type u) [StateInterp PROP S] :
+    IHandler.Sequential (stateH (PROP := PROP) S) where
   sequential e Φ spawned := by
     cases e <;> exact .rfl
 
 /-- Empty-mask WP rule for reading the state through the direct handler. -/
-theorem wpi_getState {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {S : Type u} [StateInterp GF S] (Φ : S → IProp GF) :
-    iprop(∀ s, interp (GF := GF) (S := S) s ={∅}=∗
-      interp (GF := GF) (S := S) s ∗ Φ s) ⊢
+theorem wpi_getState {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {S : Type u} [StateInterp PROP S] (Φ : S → PROP) :
+    iprop(∀ s, interp (PROP := PROP) (S := S) s ={∅}=∗
+      interp (PROP := PROP) (S := S) s ∗ Φ s) ⊢
       wpi (stateH S) (getState (fun e => e)) Φ := by
   rw [getState, trigger, wpi_vis]
   istart
@@ -108,11 +108,11 @@ theorem wpi_getState {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact Hpost
 
 /-- Empty-mask WP rule for replacing the state through the direct handler. -/
-theorem wpi_setState {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {S : Type u} [StateInterp GF S] (next : S)
-    (Φ : ULift Unit → IProp GF) :
-    iprop(∀ s, interp (GF := GF) (S := S) s ={∅}=∗
-      interp (GF := GF) (S := S) next ∗ Φ (.up ())) ⊢
+theorem wpi_setState {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {S : Type u} [StateInterp PROP S] (next : S)
+    (Φ : ULift Unit → PROP) :
+    iprop(∀ s, interp (PROP := PROP) (S := S) s ={∅}=∗
+      interp (PROP := PROP) (S := S) next ∗ Φ (.up ())) ⊢
       wpi (stateH S) (setState (fun e => e) next) Φ := by
   rw [setState, trigger, wpi_vis]
   istart

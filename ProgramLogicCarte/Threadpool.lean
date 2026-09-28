@@ -15,7 +15,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI Iris.OFE ITree
 
-universe u uρ
+universe u uρ w
 
 inductive Thread : Type u where
   | current
@@ -42,7 +42,7 @@ def spawn {ε : Type u → Type u} (inject : ThreadpoolE ⟶ ε) (child : ITree 
   | .current => ret (.up ())
   | .spawned => ITree.bind child fun _ => kill inject
 
-def threadpoolH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF ThreadpoolE where
+def threadpoolH {PROP : Type w} [BI PROP] [BIFUpdate PROP] : IHandlerBase PROP ThreadpoolE where
   handle e Φ spawned := match e with
     | .fork => iprop(Φ .current ∗ spawned .spawned)
     | .yield => iprop(|={∅, ⊤}=> |={⊤, ∅}=> Φ (.up ()))
@@ -93,8 +93,8 @@ def threadpoolH {GF : BundledGFunctors} [InvGS_gen hlc GF] : IHandler GF Threadp
     | kill => exact .rfl
 
 /-- Yield can be proved when the full invariant mask is available. -/
-theorem wpi_mask_yield {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (Φ : ULift Unit → IProp GF) :
+theorem wpi_mask_yield {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (Φ : ULift Unit → PROP) :
     Φ (.up ()) ⊢ wpiMask threadpoolH ⊤ (yield (fun e => e)) Φ := by
   rw [wpiMask]
   istart
@@ -104,7 +104,7 @@ theorem wpi_mask_yield {GF : BundledGFunctors} [InvGS_gen hlc GF]
   rw [yield, trigger, wpi_vis]
   imodintro
   isimp only [threadpoolH]
-  iapply (fupd_wand_left (P := (emp : IProp GF)))
+  iapply (fupd_wand_left (P := (emp : PROP)))
   isplitl [HΦ]
   · iintro _
     rw [wpi_ret]

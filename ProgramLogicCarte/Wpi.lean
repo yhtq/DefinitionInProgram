@@ -16,16 +16,16 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI Iris.OFE ITree
 
-universe u v uρ
+universe u v uρ w
 
-abbrev WpiState (GF : BundledGFunctors) (ε : Type u → Type v) (ρ : Type uρ) :=
-  DiscreteO (ITree ε ρ) × (ρ → IProp GF)
+abbrev WpiState (PROP : Type w) [BI PROP] (ε : Type u → Type v) (ρ : Type uρ) :=
+  DiscreteO (ITree ε ρ) × (ρ → PROP)
 
 /-- One unfolding of the interaction-tree weakest precondition. -/
-def wpiF {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (wpi : ITree ε ρ → (ρ → IProp GF) → IProp GF)
-    (t : ITree ε ρ) (Φ : ρ → IProp GF) : IProp GF :=
+def wpiF {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (wpi : ITree ε ρ → (ρ → PROP) → PROP)
+    (t : ITree ε ρ) (Φ : ρ → PROP) : PROP :=
   match t.dest with
   | ⟨.ret r, _⟩ => fupd ∅ ∅ (Φ r)
   | ⟨.tau, k⟩ => fupd ∅ ∅ (wpi (k 0) Φ)
@@ -35,13 +35,13 @@ def wpiF {GF : BundledGFunctors} [InvGS_gen hlc GF]
         (fun a => fupd ⊤ ∅ (wpi (k a) (fun _ => iprop(False)))))
 
 /-- Uncurried form used by Iris' least-fixed-point construction. -/
-def wpiF' {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (rec : WpiState GF ε ρ → IProp GF) : WpiState GF ε ρ → IProp GF
+def wpiF' {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (rec : WpiState PROP ε ρ → PROP) : WpiState PROP ε ρ → PROP
   | (⟨t⟩, Φ) => wpiF H (fun t Φ => rec (⟨t⟩, Φ)) t Φ
 
-instance wpiF_mono {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε) :
+instance wpiF_mono {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε) :
     BIMonoPred (wpiF' (ρ := ρ) H) where
   mono_pred := by
     intro rec rec' hrec hrec'
@@ -114,52 +114,50 @@ instance wpiF_mono {GF : BundledGFunctors} [InvGS_gen hlc GF]
         exact BIFUpdate.ne.ne (NonExpansive.ne (f := rec) OFE.Dist.rfl)
 
 /-- Weakest precondition for an interaction tree under logical handler `H`. -/
-def wpi {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (t : ITree ε ρ) (Φ : ρ → IProp GF) : IProp GF :=
+def wpi {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ : ρ → PROP) : PROP :=
   bi_least_fixpoint (wpiF' H) (⟨t⟩, Φ)
-
-example : BI (IProp GF) := inferInstance
 
 /-- Hoare triple for an interaction tree under handler `H`. -/
 macro:25 "{{{" P:term "}}}" t:term "@@" H:term "{{{" Q:term "}}}" : term =>
   `(iprop($P -∗ wpi $H $t $Q))
 
-instance wpi_ne {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
+instance wpi_ne {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
     (t : ITree ε ρ) : NonExpansive (wpi H t) where
   ne {n Φ₁ Φ₂} hΦ := by
     refine NonExpansive.ne (f := bi_least_fixpoint (wpiF' H)) ?_
     exact ⟨.rfl, hΦ⟩
 
 /-- Unfold the least fixed point once. -/
-theorem wpi_unfold {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (t : ITree ε ρ) (Φ : ρ → IProp GF) :
+theorem wpi_unfold {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ : ρ → PROP) :
     wpi H t Φ = wpiF H (wpi H) t Φ := by
   exact least_fixpoint_unfold (wpiF' H)
 
 @[simp]
-theorem wpi_ret {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (r : ρ) (Φ : ρ → IProp GF) :
+theorem wpi_ret {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (r : ρ) (Φ : ρ → PROP) :
     wpi H (ret r) Φ = iprop(|={∅}=> Φ r) := by
   rw [wpi_unfold]
   rfl
 
 @[simp]
-theorem wpi_tau_step {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (t : ITree ε ρ) (Φ : ρ → IProp GF) :
+theorem wpi_tau_step {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ : ρ → PROP) :
     wpi H (tau t) Φ = iprop(|={∅}=> wpi H t Φ) := by
   rw [wpi_unfold]
   rfl
 
 /-- A silent step is logically invisible.  The second unfolding is needed
 because the definition itself starts with an empty-mask fancy update. -/
-theorem wpi_tau {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (t : ITree ε ρ) (Φ : ρ → IProp GF) :
+theorem wpi_tau {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ : ρ → PROP) :
     wpi H t Φ = wpi H (tau t) Φ := by
   rw [wpi_tau_step, wpi_unfold]
   apply t.dMatchOn
@@ -177,9 +175,9 @@ theorem wpi_tau {GF : BundledGFunctors} [InvGS_gen hlc GF]
     exact fupd_idem.to_eq.symm
 
 @[simp]
-theorem wpi_vis {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    {α : Type u} (e : ε α) (k : α → ITree ε ρ) (Φ : ρ → IProp GF) :
+theorem wpi_vis {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    {α : Type u} (e : ε α) (k : α → ITree ε ρ) (Φ : ρ → PROP) :
     wpi H (vis e k) Φ = iprop(
       |={∅}=> H.handle e
         (fun a => wpi H (k a) Φ)
@@ -189,15 +187,15 @@ theorem wpi_vis {GF : BundledGFunctors} [InvGS_gen hlc GF]
 
 /-- Masked weakest precondition from Coq `wpi_mask`: open the chosen mask
 before executing the empty-mask tree, and restore it for the postcondition. -/
-def wpiMask {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (mask : CoPset) (t : ITree ε ρ) (Φ : ρ → IProp GF) : IProp GF :=
+def wpiMask {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (mask : CoPset) (t : ITree ε ρ) (Φ : ρ → PROP) : PROP :=
   iprop(|={mask, ∅}=> wpi H t (fun result => iprop(|={∅, mask}=> Φ result)))
 
 /-- Returning a value is valid under any invariant mask. -/
-theorem wpiMask_ret {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (mask : CoPset) (value : ρ) (Φ : ρ → IProp GF) :
+theorem wpiMask_ret {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (mask : CoPset) (value : ρ) (Φ : ρ → PROP) :
     Φ value ⊢ wpiMask H mask (ret value) Φ := by
   rw [wpiMask, wpi_ret]
   istart
@@ -208,9 +206,9 @@ theorem wpiMask_ret {GF : BundledGFunctors} [InvGS_gen hlc GF]
 
 /-- Iteration principle for `wpi`, directly exposing least-fixed-point
 iteration on the uncurried state space. -/
-theorem wpi_iter {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (G : WpiState GF ε ρ → IProp GF) [NonExpansive G] :
+theorem wpi_iter {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (G : WpiState PROP ε ρ → PROP) [NonExpansive G] :
     ⊢ iprop(
       □ (∀ state, wpiF' H G state -∗ G state) -∗
       ∀ state, wpi H state.1.car state.2 -∗ G state) := by
@@ -218,9 +216,9 @@ theorem wpi_iter {GF : BundledGFunctors} [InvGS_gen hlc GF]
 
 /-- Fixed-point induction principle.  Recursive calls provide both the
 induction hypothesis and the original `wpi`. -/
-theorem wpi_induction {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandler GF ε)
-    (G : WpiState GF ε ρ → IProp GF) [NonExpansive G] :
+theorem wpi_induction {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (G : WpiState PROP ε ρ → PROP) [NonExpansive G] :
     ⊢ iprop(
       □ (∀ state,
         wpiF' H (fun next => iprop(G next ∧ wpi H next.1.car next.2)) state -∗

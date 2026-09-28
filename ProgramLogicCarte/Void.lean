@@ -7,16 +7,16 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI ITree
 
-universe u v uₑ
+universe u v uₑ w
 
 /-- The empty logical handler; there is no event to interpret. -/
-def voidH {GF : BundledGFunctors} : IHandler GF (VoidE : Type u → Type v) where
+def voidH {PROP : Type w} [BI PROP] : IHandlerBase PROP (VoidE : Type u → Type v) where
   handle e := nomatch e
   mono e := nomatch e
   ne e := nomatch e
 
-instance voidHSequential {GF : BundledGFunctors} :
-    IHandler.Sequential (voidH : IHandler GF (VoidE : Type u → Type v)) where
+instance voidHSequential {PROP : Type w} [BI PROP] :
+    IHandler.Sequential (voidH : IHandlerBase PROP (VoidE : Type u → Type v)) where
   sequential e := nomatch e
 
 /-- Embed a tree into the coproduct with the empty effect. -/

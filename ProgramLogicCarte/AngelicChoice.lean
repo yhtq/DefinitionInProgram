@@ -7,7 +7,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI ITree
 
-universe u
+universe u w
 
 /-- An event whose branch may be chosen angelically. -/
 inductive AngelicE : Type u → Type (u + 1) where
@@ -17,7 +17,7 @@ def angelicChoice (α : Type u) : ITree AngelicE α :=
   trigger (.choose α)
 
 /-- The angelic handler requires only one successful continuation. -/
-def angelicH {GF : BundledGFunctors} : IHandler GF AngelicE where
+def angelicH {PROP : Type w} [BI PROP] : IHandlerBase PROP AngelicE where
   handle e Φ _ := match e with
     | .choose _ => iprop(∃ x, Φ x)
   mono e := by
@@ -34,15 +34,15 @@ def angelicH {GF : BundledGFunctors} : IHandler GF AngelicE where
     cases e
     exact exists_ne hΦ
 
-instance angelicHSequential {GF : BundledGFunctors} :
-    IHandler.Sequential (angelicH : IHandler GF AngelicE) where
+instance angelicHSequential {PROP : Type w} [BI PROP] :
+    IHandler.Sequential (angelicH : IHandlerBase PROP AngelicE) where
   sequential e Φ spawned := by
     cases e
     exact .rfl
 
 /-- WP rule selecting a witness for an angelic choice. -/
-theorem wpi_angelicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (α : Type u) (chosen : α) (Φ : α → IProp GF) :
+theorem wpi_angelicChoice {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (α : Type u) (chosen : α) (Φ : α → PROP) :
     Φ chosen ⊢ wpi angelicH (angelicChoice α) Φ := by
   rw [angelicChoice, trigger, wpi_vis]
   istart

@@ -7,7 +7,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI ITree
 
-universe u uₑ
+universe u uₑ w
 
 /-- Empty answer type lifted to the event signature's universe. -/
 abbrev EmptyAnswer : Type u := ULift Empty
@@ -27,7 +27,7 @@ def someOrUb {ε : Type u → Type u} {ρ : Type uₑ}
   | none => ub inject
 
 /-- The logical handler makes undefined behavior unprovable. -/
-def ubH {GF : BundledGFunctors} : IHandler GF UbE where
+def ubH {PROP : Type w} [BI PROP] : IHandlerBase PROP UbE where
   handle _ _ _ := iprop(False)
   mono _ := by
     intro Φ Φ' spawned spawned'
@@ -38,8 +38,8 @@ def ubH {GF : BundledGFunctors} : IHandler GF UbE where
     intro n α e Φ₁ Φ₂ spawned₁ spawned₂ hΦ hspawned
     exact .rfl
 
-instance ubHSequential {GF : BundledGFunctors} :
-    IHandler.Sequential (ubH : IHandler GF UbE) where
+instance ubHSequential {PROP : Type w} [BI PROP] :
+    IHandler.Sequential (ubH : IHandlerBase PROP UbE) where
   sequential := by
     intro α e Φ spawned
     exact .rfl

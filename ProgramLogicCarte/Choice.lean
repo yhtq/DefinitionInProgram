@@ -7,7 +7,7 @@ namespace ProgramLogicCarte
 
 open Iris Iris.BI ITree
 
-universe u
+universe u w
 
 /-- An event that lets the environment choose any inhabitant of `α`.
 `Inhabited α` is retained from the Coq development so that a deterministic
@@ -21,7 +21,7 @@ def demonicChoice (α : Type u) [Inhabited α] : ITree DemonicE α :=
 
 /-- The logical handler for demonic choice requires every branch to satisfy
 its continuation condition. -/
-def demonicH {GF : BundledGFunctors} : IHandler GF DemonicE where
+def demonicH {PROP : Type w} [BI PROP] : IHandlerBase PROP DemonicE where
   handle e Φ _ := match e with
     | .choose _ _ => iprop(∀ x, Φ x)
   mono e := by
@@ -39,15 +39,15 @@ def demonicH {GF : BundledGFunctors} : IHandler GF DemonicE where
     cases e
     exact forall_ne hΦ
 
-instance demonicHSequential {GF : BundledGFunctors} :
-    IHandler.Sequential (demonicH : IHandler GF DemonicE) where
+instance demonicHSequential {PROP : Type w} [BI PROP] :
+    IHandler.Sequential (demonicH : IHandlerBase PROP DemonicE) where
   sequential e Φ spawned := by
     cases e
     exact .rfl
 
 /-- WP rule for a demonic choice handled directly by `demonicH`. -/
-theorem wpi_demonicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (α : Type u) [Inhabited α] (Φ : α → IProp GF) :
+theorem wpi_demonicChoice {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (α : Type u) [Inhabited α] (Φ : α → PROP) :
     iprop(∀ x, Φ x) ⊢ wpi demonicH (demonicChoice α) Φ := by
   rw [demonicChoice, trigger, wpi_vis]
   istart
@@ -61,8 +61,8 @@ theorem wpi_demonicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iexact HAll
 
 /-- Demonic choice is valid under any invariant mask. -/
-theorem wpiMask_demonicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
-    (mask : CoPset) (α : Type u) [Inhabited α] (Φ : α → IProp GF) :
+theorem wpiMask_demonicChoice {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (mask : CoPset) (α : Type u) [Inhabited α] (Φ : α → PROP) :
     iprop(∀ x, Φ x) ⊢ wpiMask demonicH mask (demonicChoice α) Φ := by
   rw [wpiMask]
   istart
@@ -75,7 +75,7 @@ theorem wpiMask_demonicChoice {GF : BundledGFunctors} [InvGS_gen hlc GF]
   iintro %x
   rw [wpi_ret]
   imodintro
-  iapply (fupd_wand_left (P := (emp : IProp GF)))
+  iapply (fupd_wand_left (P := (emp : PROP)))
   isplitl [HAll]
   · iintro _
     ispecialize HAll $$ %x
