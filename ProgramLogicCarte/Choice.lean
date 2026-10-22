@@ -1,11 +1,12 @@
 import ProgramLogicCarte.Wpi
+import ProgramLogicCarte.Trace
 import ITree.UpToTaus
 
 /-! Demonic nondeterminism (`src/choice.v`). -/
 
 namespace ProgramLogicCarte
 
-open Iris Iris.BI ITree
+open Iris Iris.BI Iris.OFE ITree
 
 universe u w
 
@@ -152,6 +153,17 @@ theorem DemonicIrel_coinduct {ε : Type u → Type (u + 1)} {ρ : Type*}
   unfold DemonicIrel ITree.reverseToProp
   exact hlfp t t' h
 
+/-- The relation respects strong tree bisimulation. In this Lean encoding,
+strong bisimulation coincides with equality of `ITree`s. -/
+theorem DemonicIrel_congr {ε : Type u → Type (u + 1)} {ρ : Type*}
+    {t₁ t₂ : ITree (DemonicE + ε) ρ} {u₁ u₂ : ITree ε ρ}
+    (ht : IEq t₁ t₂) (hu : IEq u₁ u₂) :
+    DemonicIrel t₁ u₁ ↔ DemonicIrel t₂ u₂ := by
+  rw [ieq_iff_eq] at ht hu
+  subst t₂
+  subst u₂
+  rfl
+
 /-- Resolve every demonic choice using the default value stored in its event. -/
 def demonicIfn {ε : Type u → Type (u + 1)} {ρ : Type*}
     (t : ITree (DemonicE + ε) ρ) : ITree ε ρ :=
@@ -216,5 +228,255 @@ theorem demonicIfn_irel {ε : Type u → Type (u + 1)} {ρ : Type*}
           rw [demonicIfn_vis]
           exact .vis e k _ (fun _ => rfl)
   · exact rfl
+
+/-- For every concrete resolution of a source tree, its target WP holds. -/
+private def demonicAdequacyPred {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type (u + 1)} {ρ : Type*} (H : IHandlerBase PROP ε)
+    (state : WpiState PROP (DemonicE + ε) ρ) : PROP :=
+  iprop(∀ t' : ITree ε ρ,
+    ∀ _ : DemonicIrel state.1.car t', wpi H t' state.2)
+
+private instance demonicAdequacyPred_ne {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type (u + 1)} {ρ : Type*} (H : IHandlerBase PROP ε) :
+    NonExpansive (demonicAdequacyPred (ρ := ρ) H) where
+  ne := by
+    intro n state₁ state₂ hstate
+    rcases state₁ with ⟨⟨t₁⟩, Φ₁⟩
+    rcases state₂ with ⟨⟨t₂⟩, Φ₂⟩
+    rcases hstate with ⟨ht, hΦ⟩
+    obtain rfl := DiscreteO.dist_inj ht
+    unfold demonicAdequacyPred
+    exact forall_ne fun t' => forall_ne fun _ =>
+      NonExpansive.ne (f := wpi H t') hΦ
+
+/-- Demonic relational interpretation preserves the empty-mask weakest
+precondition. This is the fixed-point induction step for masked adequacy. -/
+theorem demonic_adequacy_empty {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type (u + 1)} {ρ : Type*} (H : IHandlerBase PROP ε)
+    (t : ITree (DemonicE + ε) ρ) (t' : ITree ε ρ) (Φ : ρ → PROP)
+    (hrel : DemonicIrel t t') :
+    wpi (demonicH ⊕ₕ H) t Φ ⊢ wpi H t' Φ := by
+  iintro Hwp
+  ihave Hgen : iprop(∀ state : WpiState PROP (DemonicE + ε) ρ,
+      wpi (demonicH ⊕ₕ H) state.1.car state.2 -∗
+        demonicAdequacyPred H state) $$ []
+  · iapply (wpi_iter (demonicH ⊕ₕ H) (demonicAdequacyPred (ρ := ρ) H))
+    iintro !> %state HF
+    rcases state with ⟨⟨tree⟩, post⟩
+    apply tree.dMatchOn
+    · intro value htree
+      subst tree
+      isimp only [wpiF', wpiF, dest_ret] at HF
+      isimp only [demonicAdequacyPred]
+      iintro %target %hrel
+      have hstep := (DemonicIrel_unfold (ret value) target).mp hrel
+      generalize hsource : (ret value : ITree (DemonicE + ε) ρ) = source at hstep
+      cases hstep with
+      | ret x =>
+          have hv : value = x := ITree.ret_inj hsource
+          subst x
+          rw [wpi_ret]
+          iexact HF
+      | choose α default x k t h =>
+          have hshape := congrArg (fun t => t.dest.fst) hsource
+          simp only [dest_ret, dest_vis] at hshape
+          cases hshape
+      | tau next next' h =>
+          have hshape := congrArg (fun t => t.dest.fst) hsource
+          simp only [dest_ret, dest_tau] at hshape
+          cases hshape
+      | vis e k k' h =>
+          have hshape := congrArg (fun t => t.dest.fst) hsource
+          simp only [dest_ret, dest_vis] at hshape
+          cases hshape
+    · intro child htree
+      subst tree
+      isimp only [wpiF', wpiF, dest_tau] at HF
+      isimp only [demonicAdequacyPred]
+      iintro %target %hrel
+      have hstep := (DemonicIrel_unfold (tau child) target).mp hrel
+      generalize hsource : (tau child : ITree (DemonicE + ε) ρ) = source at hstep
+      cases hstep with
+      | tau next next' h =>
+          have hn : child = next := ITree.tau_inj hsource
+          subst next
+          rw [wpi_tau_step]
+          imod HF with HF
+          imodintro
+          isimp only [demonicAdequacyPred] at HF
+          ispecialize HF $$ %next'
+          ispecialize HF $$ %h
+          iexact HF
+      | choose α default x k t h =>
+          have hshape := congrArg (fun t => t.dest.fst) hsource
+          simp only [dest_tau, dest_vis] at hshape
+          cases hshape
+      | ret x =>
+          have hshape := congrArg (fun t => t.dest.fst) hsource
+          simp only [dest_tau, dest_ret] at hshape
+          cases hshape
+      | vis e k k' h =>
+          have hshape := congrArg (fun t => t.dest.fst) hsource
+          simp only [dest_tau, dest_vis] at hshape
+          cases hshape
+    · intro α event continuation htree
+      subst tree
+      isimp only [wpiF', wpiF, dest_vis] at HF
+      isimp only [demonicAdequacyPred]
+      iintro %target %hrel
+      have hstep := (DemonicIrel_unfold (vis event continuation) target).mp hrel
+      generalize hsource : (vis event continuation : ITree (DemonicE + ε) ρ) = source at hstep
+      cases event with
+      | inl choice =>
+          cases choice with
+          | choose default =>
+              cases hstep with
+              | choose β other x k resolved h =>
+                  have hα : α = β := ITree.vis_inj_α hsource
+                  subst β
+                  have hparts := ITree.vis_inj hsource
+                  have hk : continuation = k := hparts.2
+                  subst k
+                  rw [wpi_tau_step]
+                  imod HF with HF
+                  imodintro
+                  isimp only [IHandler.sum, demonicH] at HF
+                  ispecialize HF $$ %x
+                  isimp only [demonicAdequacyPred] at HF
+                  ispecialize HF $$ %resolved
+                  ispecialize HF $$ %h
+                  iexact HF
+              | ret x =>
+                  have hshape := congrArg (fun t => t.dest.fst) hsource
+                  simp only [dest_vis, dest_ret] at hshape
+                  cases hshape
+              | tau next next' h =>
+                  have hshape := congrArg (fun t => t.dest.fst) hsource
+                  simp only [dest_vis, dest_tau] at hshape
+                  cases hshape
+              | vis e k k' h =>
+                  have hshape := congrArg (fun t => t.dest.fst) hsource
+                  simp only [dest_vis] at hshape
+                  cases hshape
+      | inr e =>
+          cases hstep with
+          | vis e' k k' h =>
+              have hα : α = _ := ITree.vis_inj_α hsource
+              cases hα
+              have hparts := ITree.vis_inj hsource
+              have he : e = e' := by cases hparts.1; rfl
+              have hk : continuation = k := hparts.2
+              subst e'
+              subst k
+              rw [wpi_vis]
+              imod HF with HF
+              imodintro
+              isimp only [IHandler.sum] at HF
+              iapply (H.mono e
+                (fun a => demonicAdequacyPred H (⟨⟨continuation a⟩, post⟩))
+                (fun a => wpi H (k' a) post)
+                (fun a => fupd ⊤ ∅ (demonicAdequacyPred H
+                  (⟨⟨continuation a⟩, fun _ => iprop(False)⟩)))
+                (fun a => fupd ⊤ ∅ (wpi H (k' a) (fun _ => iprop(False))))) $$ [] [] HF
+              · iintro %a Ha
+                isimp only [demonicAdequacyPred] at Ha
+                ispecialize Ha $$ %(k' a)
+                ispecialize Ha $$ %(h a)
+                iexact Ha
+              · iintro !> %a Ha
+                imod Ha with Ha
+                imodintro
+                isimp only [demonicAdequacyPred] at Ha
+                ispecialize Ha $$ %(k' a)
+                ispecialize Ha $$ %(h a)
+                iexact Ha
+          | choose β default x k resolved h =>
+              have hshape := congrArg (fun t => t.dest.fst) hsource
+              simp only [dest_vis] at hshape
+              cases hshape
+          | ret x =>
+              have hshape := congrArg (fun t => t.dest.fst) hsource
+              simp only [dest_vis, dest_ret] at hshape
+              cases hshape
+          | tau next next' h =>
+              have hshape := congrArg (fun t => t.dest.fst) hsource
+              simp only [dest_vis, dest_tau] at hshape
+              cases hshape
+  ispecialize Hgen $$ %(⟨⟨t⟩, Φ⟩)
+  ispecialize Hgen $$ Hwp
+  isimp only [demonicAdequacyPred] at Hgen
+  ispecialize Hgen $$ %t'
+  ispecialize Hgen $$ %hrel
+  iexact Hgen
+
+/-- Demonic relational interpretation preserves WP under any invariant mask. -/
+theorem demonic_adequacy {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type (u + 1)} {ρ : Type*} (H : IHandlerBase PROP ε)
+    (mask : CoPset) (t : ITree (DemonicE + ε) ρ)
+    (t' : ITree ε ρ) (Φ : ρ → PROP) (hrel : DemonicIrel t t') :
+    wpiMask (demonicH ⊕ₕ H) mask t Φ ⊢ wpiMask H mask t' Φ := by
+  unfold wpiMask
+  exact fupd_mono (demonic_adequacy_empty H t t'
+    (fun result => iprop(|={∅, mask}=> Φ result)) hrel)
+
+/-- Every finite source trace has a concrete resolution with its demonic
+events erased from the visible trace. -/
+theorem demonic_trace {ε : Type u → Type (u + 1)} {ρ : Type*}
+    {tr : Trace (DemonicE + ε) ρ} {t : ITree (DemonicE + ε) ρ}
+    (htr : Trace.IsTrace tr t) :
+    ∃ t' : ITree ε ρ, DemonicIrel t t' ∧
+      Trace.IsTrace (Trace.eraseLeft tr) t' := by
+  classical
+  induction htr with
+  | ret x =>
+      exact ⟨ret x, (DemonicIrel_unfold _ _).mpr (.ret x), .ret x⟩
+  | vis e answer k tr h ih =>
+      obtain ⟨t', hrel, htrace⟩ := ih
+      cases e with
+      | inl choice =>
+          cases choice with
+          | choose default =>
+              exact ⟨tau t', (DemonicIrel_unfold _ _).mpr
+                (.choose _ default answer k t' hrel), .tau htrace⟩
+      | inr e =>
+          let k' : _ → ITree ε ρ :=
+            fun x => if x = answer then t' else demonicIfn (k x)
+          refine ⟨vis e k', (DemonicIrel_unfold _ _).mpr (.vis e k k' ?_), ?_⟩
+          · intro x
+            by_cases hx : x = answer
+            · subst x
+              simpa [k'] using hrel
+            · simpa [k', hx] using demonicIfn_irel (k x)
+          · exact .vis e answer k' _ (by simpa [k'] using htrace)
+  | visEmpty e k empty =>
+      cases e with
+      | inl choice =>
+          cases choice with
+          | choose default => exact False.elim (empty default)
+      | inr e =>
+          let k' : _ → ITree ε ρ := fun x => False.elim (empty x)
+          refine ⟨vis e k', (DemonicIrel_unfold _ _).mpr (.vis e k k' ?_), ?_⟩
+          · intro x
+            exact False.elim (empty x)
+          · exact .visEmpty e k' empty
+  | cut t =>
+      exact ⟨demonicIfn t, demonicIfn_irel t, .cut _⟩
+  | tau h ih =>
+      obtain ⟨t', hrel, htrace⟩ := ih
+      exact ⟨tau t', (DemonicIrel_unfold _ _).mpr (.tau _ _ hrel), .tau htrace⟩
+
+/-- A source trace can be resolved to an execution whose masked WP follows
+from the source WP. -/
+theorem demonic_trace_adequacy {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type (u + 1)} {ρ : Type*} (H : IHandlerBase PROP ε)
+    (mask : CoPset) {tr : Trace (DemonicE + ε) ρ}
+    {t : ITree (DemonicE + ε) ρ} (Φ : ρ → PROP)
+    (htr : Trace.IsTrace tr t) :
+    ∃ t' : ITree ε ρ,
+      Trace.IsTrace (Trace.eraseLeft tr) t' ∧
+      (wpiMask (demonicH ⊕ₕ H) mask t Φ ⊢ wpiMask H mask t' Φ) := by
+  obtain ⟨t', hrel, htrace⟩ := demonic_trace htr
+  exact ⟨t', htrace, demonic_adequacy H mask t t' Φ hrel⟩
+
 
 end ProgramLogicCarte

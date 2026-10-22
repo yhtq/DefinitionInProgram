@@ -6,6 +6,11 @@ namespace Skolemization
 
 open Iris Iris.BI Iris.OFE ITree ProgramLogicCarte
 
+-- inductive PROPS.{u} where
+--   | intro : ((P : Type u) -> [BI P] -> [BIFUpdate P] -> PROP) -> PROPS
+
+-- instance : BI PROPS where
+--   emp := PROPS.intro (fun P _ _ => emp)
 
 variable {PROP : Type w} [BI PROP] [BIFUpdate PROP]
     {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
@@ -13,7 +18,7 @@ variable {PROP : Type w} [BI PROP] [BIFUpdate PROP]
     {P : PROP}
     (source : ⊢ {{{ P }}} t @@ H {{{fun r => ∃ a, A a r}}})
 
-#synth BI (PROP)
+#synth BI (IProp GF)
 #check UPred.instBIUPred
 
 
@@ -22,3 +27,19 @@ theorem skolemization_conservative
     (hQ : ∀ a, ({{{ P }}} t @@ H {{{A a}}}) ⊢ Q) :
     ⊢ Q := by
   iintro Htriple
+
+-- variable {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+--     {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+--     (t : ITree ε ρ) {α : Type*} (A : α -> ρ → PROP)
+--     {P : PROP}
+--     (source : ⊢ {{{ P }}} t @@ H {{{fun r => ∃ a, A a r}}})
+
+-- #synth BI (PROP)
+-- #check UPred.instBIUPred
+
+
+-- theorem skolemization_conservative
+--     {Q : PROP}
+--     (hQ : ∀ a, ({{{ P }}} t @@ H {{{A a}}}) ⊢ Q) :
+--     ⊢ Q := by
+--   iintro Htriple

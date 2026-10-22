@@ -13,6 +13,7 @@ import ProgramLogicCarte.Halt
 import ProgramLogicCarte.Step
 import ProgramLogicCarte.Threadpool
 import ProgramLogicCarte.Heap
+import ProgramLogicCarte.HeapOwnership
 import ProgramLogicCarte.Interpreter
 import ProgramLogicCarte.ExampleLang.Syntax
 import ProgramLogicCarte.ExampleLang.Heap

@@ -36,6 +36,9 @@ let
     version = metadata.lean.version;
     src = fetchSource metadata.lean;
     mimalloc-src = mimallocSource;
+    # Lean 4.35 declares Git-backed ExternalProject targets during CMake
+    # configuration, even though those targets are excluded from the build.
+    nativeBuildInputs = (_old.nativeBuildInputs or [ ]) ++ [ pkgs.git ];
     buildInputs = (_old.buildInputs or [ ]) ++ [ pkgs.openssl ];
     cmakeFlags =
       (_old.cmakeFlags or [ ])

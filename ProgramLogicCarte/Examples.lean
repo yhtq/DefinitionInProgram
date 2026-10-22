@@ -35,6 +35,30 @@ theorem pickThenSucc_runs :
   rw [demonicIfn_choose, demonicIfn_ret]
   simp
 
+/-- The relational interpreter may choose a non-default branch. -/
+theorem pickThenSucc_canChooseFive :
+    DemonicIrel pickThenSucc
+      (tau (ret 6 : ITree (VoidE : Type → Type 1) Int)) := by
+  change DemonicIrel
+    (vis (SumE.inl (.choose Int 0)) (fun n => ret (n + 1)))
+    (tau (ret 6 : ITree (VoidE : Type → Type 1) Int))
+  apply (DemonicIrel_unfold _ _).mpr
+  apply DemonicIrelF.choose Int 0 5
+  exact (DemonicIrel_unfold _ _).mpr (.ret 6)
+
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP] (Φ : Int → PROP) :
+    wpi (demonicH ⊕ₕ (voidH : IHandlerBase PROP (VoidE : Type → Type 1)))
+      pickThenSucc Φ ⊢
+    wpi voidH (tau (ret 6 : ITree (VoidE : Type → Type 1) Int)) Φ :=
+  demonic_adequacy_empty voidH pickThenSucc _ Φ pickThenSucc_canChooseFive
+
+example {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    (mask : CoPset) (Φ : Int → PROP) :
+    wpiMask (demonicH ⊕ₕ (voidH : IHandlerBase PROP (VoidE : Type → Type 1)))
+      mask pickThenSucc Φ ⊢
+    wpiMask voidH mask (tau (ret 6 : ITree (VoidE : Type → Type 1) Int)) Φ :=
+  demonic_adequacy voidH mask pickThenSucc _ Φ pickThenSucc_canChooseFive
+
 example : runVoid 2 (demonicIfn pickThenSucc) = some 1 := by
   rw [pickThenSucc_runs]
   exact runVoid_tau 1 (ret 1)

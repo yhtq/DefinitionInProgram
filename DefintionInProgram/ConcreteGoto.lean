@@ -257,8 +257,7 @@ private theorem append_aux {ι Next : Type*} [NextMeaning ι Next]
       simpa using SemanticTrace.cons run second
   | cons run rest ih =>
       intro nextExpr tail middle final hresult second
-      simpa only [List.cons_append] using
-        SemanticTrace.cons run (ih hresult second)
+      exact SemanticTrace.cons run (ih hresult second)
 
 theorem append {ι Next : Type*} [NextMeaning ι Next]
     {tr₁ : List (Expr ι Next × State ι)}
@@ -907,7 +906,7 @@ instance programIsPC :
     cases big with
     | block _ loopRun =>
         have finished := Expr.BigStep.while_finished loopRun
-        simpa using finished
+        simpa [pcRetract] using finished
   trace_not_end := by
     intro s final tr run chosen
     rcases chosen with ⟨label, guard, body, heq, condition, loopTrace⟩ | ⟨notWhole, _⟩

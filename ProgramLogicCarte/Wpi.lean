@@ -226,4 +226,66 @@ theorem wpi_induction {PROP : Type w} [BI PROP] [BIFUpdate PROP]
       ∀ state, wpi H state.1.car state.2 -∗ G state) := by
   exact least_fixpoint_ind (wpiF' H) G
 
+/-- A tree silently diverges if every suffix after finitely many silent steps
+is itself a silent step. -/
+def SilentlyDiverges {ε : Type u → Type v} {ρ : Type uρ}
+    (t : ITree ε ρ) : Prop :=
+  ∀ n s, t = tauN n s → ∃ child, s = tau child
+
+private def divergencePred {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ}
+    (state : WpiState PROP ε ρ) : PROP :=
+  iprop(∀ _ : SilentlyDiverges state.1.car, |={∅}=> False)
+
+private instance divergencePred_ne {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} :
+    NonExpansive (divergencePred (PROP := PROP) (ε := ε) (ρ := ρ)) where
+  ne := by
+    intro n s₁ s₂ hs
+    rcases s₁ with ⟨⟨t₁⟩, Φ₁⟩
+    rcases s₂ with ⟨⟨t₂⟩, Φ₂⟩
+    obtain rfl := DiscreteO.dist_inj hs.1
+    exact OFE.Dist.rfl
+
+/-- Silent divergence makes the weakest precondition false under an
+empty-mask fancy update, for any handler and postcondition. -/
+theorem wpi_divergence {PROP : Type w} [BI PROP] [BIFUpdate PROP]
+    {ε : Type u → Type v} {ρ : Type uρ} (H : IHandlerBase PROP ε)
+    (t : ITree ε ρ) (Φ : ρ → PROP) (ht : SilentlyDiverges t) :
+    wpi H t Φ ⊢ iprop(|={∅}=> False) := by
+  iintro Hwp
+  ihave Hgen : iprop(∀ state : WpiState PROP ε ρ,
+      wpi H state.1.car state.2 -∗ divergencePred state) $$ []
+  · iapply (wpi_iter H (divergencePred (PROP := PROP) (ε := ε) (ρ := ρ)))
+    iintro !> %state HF
+    rcases state with ⟨⟨tree⟩, post⟩
+    apply tree.dMatchOn
+    · intro r heq
+      subst tree
+      isimp only [divergencePred]
+      iintro %hdiv
+      obtain ⟨child, hc⟩ := hdiv 0 (ret r) rfl
+      itree_elim hc
+    · intro child heq
+      subst tree
+      isimp only [wpiF', wpiF, dest_tau] at HF
+      isimp only [divergencePred]
+      iintro %hdiv
+      imod HF with HF
+      isimp only [divergencePred] at HF
+      ispecialize HF $$ %(by
+        intro n s heq
+        exact hdiv (n + 1) s (congrArg tau heq))
+      iexact HF
+    · intro α e k heq
+      subst tree
+      isimp only [divergencePred]
+      iintro %hdiv
+      obtain ⟨child, hc⟩ := hdiv 0 (vis e k) rfl
+      itree_elim hc
+  ispecialize Hgen $$ %(⟨⟨t⟩, Φ⟩ : WpiState PROP ε ρ) Hwp
+  isimp only [divergencePred] at Hgen
+  ispecialize Hgen $$ %ht
+  iexact Hgen
+
 end ProgramLogicCarte

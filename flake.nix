@@ -64,8 +64,8 @@
           );
 
           # nixpkgs#550523 prevents buildLakePackage from writing native Lake
-          # artifacts into immutable dependency paths. This still verifies all
-          # project imports against the nixpkgs-provided Mathlib.
+          # artifacts into immutable dependency paths. Compile Main's local
+          # imports before Main while using the nixpkgs-provided Mathlib.
           packages.default =
             pkgs.runCommand "DefintionInProgram-0.1.0"
               {
@@ -75,7 +75,13 @@
                 ];
               }
               ''
-                lean ${projectSrc}/Main.lean
+                mkdir -p DefintionInProgram
+                cp ${projectSrc}/DefintionInProgram/{SourceLanguage,ConcreteGoto}.lean DefintionInProgram/
+                cp ${projectSrc}/Main.lean .
+                export LEAN_PATH="$PWD''${LEAN_PATH:+:$LEAN_PATH}"
+                lean -o DefintionInProgram/SourceLanguage.olean DefintionInProgram/SourceLanguage.lean
+                lean -o DefintionInProgram/ConcreteGoto.olean DefintionInProgram/ConcreteGoto.lean
+                lean Main.lean
                 cp -r ${projectSrc}/. "$out/"
               '';
 

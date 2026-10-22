@@ -412,6 +412,7 @@ theorem nondeterministic_skolemization {Ps : Set (PROP)} {Q : PROP} (hPs : ∃ p
   have := hPQ'.trans hQ'
   exact hP.trans this
 
+
 theorem peirce (A B : Prop) (em : ∀ p : Prop, p ∨ ¬p) : ((A -> B) -> A) -> A := by
   specialize em A
   apply Or.elim em
@@ -420,6 +421,140 @@ theorem peirce (A B : Prop) (em : ∀ p : Prop, p ∨ ¬p) : ((A -> B) -> A) -> 
     have : A -> B := (fun a => False.elim (cn a))
     intro h
     exact h this
+
+/-- Every inhabited downset already contains base falsity. -/
+theorem false_mem_of_nonempty {S : SIProp PROP} (hS : S.carrier.Nonempty) :
+    BIBase.pure False ∈ S.carrier := by
+  obtain ⟨P, hP⟩ := hS
+  exact S.down_closed hP false_elim
+
+section FUpdate
+
+variable [BIFUpdate PROP]
+
+/-- Lift fancy update, adjoining base falsity to represent the empty downset. -/
+def fupd (E₁ E₂ : CoPset) (S : SIProp PROP) : SIProp PROP :=
+  down {R | ∃ P : PROP,
+    And (Or (P ∈ S.carrier) (P = (BIBase.pure False : PROP)))
+      (FUpd.fupd E₁ E₂ P = R)}
+
+@[simp] theorem mem_fupd {E₁ E₂ : CoPset} {S : SIProp PROP} {R : PROP} :
+    R ∈ (fupd E₁ E₂ S).carrier ↔
+      ∃ P : PROP, And (Or (P ∈ S.carrier) (P = (BIBase.pure False : PROP)))
+        (R ⊢ FUpd.fupd E₁ E₂ P) := by
+  change (∃ X, (∃ P, And (Or (P ∈ S.carrier) (P = (BIBase.pure False : PROP)))
+    (FUpd.fupd E₁ E₂ P = X)) ∧ (R ⊢ X)) ↔ _
+  constructor
+  · rintro ⟨X, ⟨P, hP, rfl⟩, hR⟩
+    exact ⟨P, hP, hR⟩
+  · rintro ⟨P, hP, hR⟩
+    exact ⟨FUpd.fupd E₁ E₂ P, ⟨P, hP, rfl⟩, hR⟩
+
+/-- On inhabited downsets, padding has no effect on fancy update. -/
+theorem mem_fupd_of_nonempty {E₁ E₂ : CoPset} {S : SIProp PROP} {R : PROP}
+    (hS : S.carrier.Nonempty) :
+    R ∈ (fupd E₁ E₂ S).carrier ↔
+      ∃ P ∈ S.carrier, R ⊢ FUpd.fupd E₁ E₂ P := by
+  rw [mem_fupd]
+  constructor
+  · rintro ⟨P, hP, hR⟩
+    rcases hP with hP | rfl
+    · exact ⟨P, hP, hR⟩
+    · exact ⟨BIBase.pure False, false_mem_of_nonempty hS, hR⟩
+  · rintro ⟨P, hP, hR⟩
+    exact ⟨P, Or.inl hP, hR⟩
+
+instance : BIFUpdate (SIProp PROP) where
+  fupd := fupd
+  ne := ⟨fun _ _ _ h => by cases h; rfl⟩
+  subset := by
+    intro E₁ E₂ h r hr
+    let e : PROP := BIBase.emp
+    have he : e ∈ (BIBase.emp : SIProp PROP).carrier :=
+      mem_down_singleton.mpr BIBase.Entails.rfl
+    have hinner : FUpd.fupd E₂ E₁ e ∈ (fupd E₂ E₁ (BIBase.emp : SIProp PROP)).carrier :=
+      mem_fupd.mpr ⟨e, Or.inl he, BIBase.Entails.rfl⟩
+    have hbase : r ⊢ FUpd.fupd E₁ E₂ (FUpd.fupd E₂ E₁ e) := by
+      have hre : r ⊢ e := mem_down_singleton.mp hr
+      exact hre.trans (BIFUpdate.subset (PROP := PROP) h)
+    exact mem_fupd.mpr ⟨FUpd.fupd E₂ E₁ e, Or.inl hinner, hbase⟩
+  except0 := by
+    intro E₁ E₂ P r hr
+    rcases hr with hfalse | hupd
+    · obtain ⟨p, hp, _⟩ := mem_later.mp hfalse
+      exact False.elim hp
+    · exact hupd
+  mono := by
+    intro E₁ E₂ P Q h r hr
+    obtain ⟨p, hp, hrp⟩ := mem_fupd.mp hr
+    exact mem_fupd.mpr ⟨p, hp.elim (fun hp => Or.inl (h hp)) Or.inr, hrp⟩
+  trans := by
+    intro E₁ E₂ E₃ S r hr
+    obtain ⟨q, hq, hrq⟩ := mem_fupd.mp hr
+    obtain ⟨p, hp, hqp⟩ :
+        ∃ p : PROP, Or (p ∈ S.carrier) (p = BIBase.pure False) ∧
+          (q ⊢ FUpd.fupd E₂ E₃ p) := by
+      rcases hq with hq | rfl
+      · exact mem_fupd.mp hq
+      · exact ⟨BIBase.pure False, Or.inr rfl, false_elim⟩
+    have hbase : FUpd.fupd E₁ E₂ q ⊢ FUpd.fupd E₁ E₃ p :=
+      (BIFUpdate.mono (PROP := PROP) hqp).trans BIFUpdate.trans
+    exact mem_fupd.mpr ⟨p, hp, hrq.trans hbase⟩
+  mask_frame_right_strong := by
+    intro E₁ E₂ Ef S hdisj x hx
+    obtain ⟨p, hp, hxp⟩ := mem_fupd.mp hx
+    let C : Prop := E₂ ## Ef
+    have hmask (q : PROP) (hq : Or (q ∈ S.carrier) (q = BIBase.pure False))
+        (hguard : p ⊢ BIBase.imp (BIBase.pure C) q) :
+        x ∈ (fupd (E₁ ∪ Ef) (E₂ ∪ Ef) S).carrier := by
+      have hbase : FUpd.fupd E₁ E₂ p ⊢ FUpd.fupd (E₁ ∪ Ef) (E₂ ∪ Ef) q :=
+        (BIFUpdate.mono (PROP := PROP) hguard).trans
+          (BIFUpdate.mask_frame_right_strong (PROP := PROP) hdisj)
+      exact mem_fupd.mpr ⟨q, hq, hxp.trans hbase⟩
+    by_cases hC : C
+    · have hq : Or (p ∈ S.carrier) (p = BIBase.pure False) := by
+        rcases hp with hp | hp
+        · exact Or.inl (hp p BIBase.Entails.rfl hC)
+        · exact Or.inr hp
+      exact hmask p hq (BI.imp_intro and_elim_l)
+    · have hguard : p ⊢ BIBase.imp (BIBase.pure C) (BIBase.pure False) := by
+        apply BI.imp_intro
+        apply pure_elim_right
+        intro h
+        exact (hC h).elim
+      exact hmask (BIBase.pure False) (Or.inr rfl) hguard
+  frame_right := by
+    intro E₁ E₂ S R x hx
+    obtain ⟨a, ha, r, hr, hxar⟩ := mem_sep.mp hx
+    obtain ⟨p, hp, hafupd⟩ := mem_fupd.mp ha
+    have hbase : x ⊢ FUpd.fupd E₁ E₂ (BIBase.sep p r) :=
+      hxar.trans ((sep_mono hafupd BIBase.Entails.rfl).trans BIFUpdate.frame_right)
+    rcases hp with hp | rfl
+    · have hpr : BIBase.sep p r ∈ (BIBase.sep S R).carrier :=
+        mem_sep.mpr ⟨p, hp, r, hr, BIBase.Entails.rfl⟩
+      exact mem_fupd.mpr ⟨BIBase.sep p r, Or.inl hpr, hbase⟩
+    · exact mem_fupd.mpr ⟨BIBase.pure False, Or.inr rfl,
+        hbase.trans (BIFUpdate.mono (PROP := PROP) false_sep.mp)⟩
+
+/-- The lifted update agrees exactly with the base update on principal propositions. -/
+theorem lift_fupd (E₁ E₂ : CoPset) (P : PROP) :
+    FUpd.fupd E₁ E₂ (lift P) = lift (FUpd.fupd E₁ E₂ P) := by
+  apply ext
+  ext R
+  constructor
+  · intro hR
+    obtain ⟨p, hp, hRp⟩ := mem_fupd.mp hR
+    have hpP : p ⊢ P := by
+      rcases hp with hp | rfl
+      · exact mem_down_singleton.mp hp
+      · exact false_elim
+    exact mem_down_singleton.mpr
+      (hRp.trans (BIFUpdate.mono (PROP := PROP) hpP))
+  · intro hR
+    exact mem_fupd.mpr ⟨P, Or.inl
+      (mem_down_singleton.mpr BIBase.Entails.rfl), mem_down_singleton.mp hR⟩
+
+end FUpdate
 
 end SIProp
 end Skolemization

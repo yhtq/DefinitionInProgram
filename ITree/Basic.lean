@@ -44,15 +44,12 @@ variable {ε : Type u1 → Type v} {ρ : Type u2}
 section
 variable {X : Type u}
 
-@[simp]
 def ret' (v : ρ) : P ε ρ X :=
   .mk (.ret v) elim0
 
-@[simp]
 def tau' (t : X) : P ε ρ X :=
   .mk .tau (fin1Const t)
 
-@[simp]
 def vis' {α : Type u1} (e : ε α) (k : α → X) : P ε ρ X :=
   .mk (.vis α e) (k ·)
 
@@ -60,11 +57,9 @@ end
 
 /- Type Constructors -/
 
-@[match_pattern, simp]
 def ret (v : ρ) : ITree ε ρ :=
   .mk <| ret' v
 
-@[match_pattern, simp]
 def tau (t : ITree ε ρ) : ITree ε ρ :=
   .mk <| tau' t
 
@@ -73,10 +68,10 @@ def tauN (n : Nat) (t : ITree ε ρ) : ITree ε ρ :=
   | 0     => t
   | n + 1 => tau (tauN n t)
 
-@[match_pattern, simp]
 def vis {α : Type u1} (e : ε α) (k : α → ITree ε ρ) : ITree ε ρ :=
   .mk <| vis' e k
 
+@[simp]
 def trigger {α : Type u1} (e : ε α) : ITree ε α :=
   vis e (λ x => ret x)
 
