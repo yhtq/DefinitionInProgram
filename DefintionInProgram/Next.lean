@@ -1,10 +1,13 @@
 import ProgramLogicCarte.WpiStructural
 import DefintionInProgram.Breakpoint
+import DefintionInProgram.NextSimulation
 import Iris.Instances.Lib.GhostVar
 import Iris.Instances.Lib.FUpd
 import Iris.Instances.Lib.Invariants
+import IrisUtil.Fractional
 import Wander.Tactic
 import Mathlib.Logic.Small.Defs
+import Mathlib.Tactic.NormNum
 
 namespace ProgramLogic
 
@@ -12,82 +15,54 @@ open Iris Iris.BI ITree ProgramLogicCarte
 
 universe u v uv
 
-inductive NextE (ρ : Type u) : Type u → Type (max u v) where
-  | next : NextE ρ (ULift Unit)
-  | finish : NextE ρ ρ
-
-def next {ρ : Type u} : ITree (NextE ρ) (ULift Unit) := trigger .next
-def finish {ρ : Type u} : ITree (NextE ρ) ρ := trigger .finish
-
-
 namespace NextGhost
 
-variable {ι ρ : Type u} {ε : Type u → Type (max u v)} {GF : BundledGFunctors}
+
+variable {ι ρ : Type u} {ε : Type u → Type (max u v)} {GF : BundledGFunctors.{0, 0, 0}}
 abbrev Tree (ι ρ : Type u) (ε : Type u → Type (max u v)) := ITree (BreakpointE.{u, v} ι + ε) ρ
 
 
-variable [Inhabited (Tree ι ρ ε)]
+variable [Inhabited (Tree ι ρ ε)] [Small.{0} (Tree ι ρ ε)]
+  [Iris.GhostVarG GF (Shrink.{0} (Tree ι ρ ε))]
 
-namespace IrisUniv
-open COFE OFE
-abbrev constOF (B : Type*) : OFunctorPre := fun _ _ _ _ => B
-
-instance oFunctorConstOF [COFE B] : OFunctor (constOF B) where
-  ofe := _
-  map _ _ := ⟨id, id_ne⟩
-  map_ne := by intros; constructor; simp
-  map_id := by simp
-  map_comp := by simp
-
-instance OFunctor.constOF_contractive [COFE B] : OFunctorContractive (constOF B) where
-  map_contractive.1 := by simp [OFunctor.map]
-
-end IrisUniv
+#check Iris.Agree
 
 
-/-- Client ownership of the suspended computation. -/
-abbrev owns (γ : GName) (t : ITree (BreakpointE ι + ε) ρ) : IProp GF :=
-  -- ghost_var γ (.own ⟨1 / 3, by grind⟩) (equivShrink _ t)
-  iOwn (F := IrisUniv.constOF (DFracAgree.DFracAgreeR (DiscreteO (Tree ι ρ ε)))) γ (mk ⟨1 / 3, by grind⟩ ⟨t⟩)
+/-- Client ownership of the suspended computation: a fixed one-third share. -/
+noncomputable def owns (γ : GName) (t : ITree (BreakpointE ι + ε) ρ) : IProp GF :=
+  ghost_var γ (.own ⟨1 / 3, by grind⟩) (equivShrink _ t)
+
 
 instance {γ} {t : ITree (BreakpointE ι + ε) ρ} : Timeless (owns (GF := GF) γ t) := by
   unfold owns
   infer_instance
 
-theorem agreement (γ : GName) (t s : ITree (BreakpointE ι + ε) ρ) :
-    iprop(owns (GF := GF) γ t ∗ owns γ s) ⊢ iprop(⌜t = s⌝) := by
-  unfold owns
-  iintro ⟨Ht, Hs⟩
-  ihave %heq := ghost_var_agree $$ Ht Hs
-  ipureintro
-  exact (equivShrink _).injective heq
+-- theorem agreement (γ : GName) (t s : ITree (BreakpointE ι + ε) ρ) :
+--     iprop(owns (GF := GF) γ t ∗ owns γ s) ⊢ iprop(⌜t = s⌝) := by
+--   unfold owns
+--   iintro ⟨Ht, Hs⟩
+--   ihave %heq := ghost_var_agree $$ Ht Hs
+--   ipureintro
+--   exact (equivShrink _).injective heq
 variable {hlc : HasLC} [InvGS_gen hlc GF]
 
 
 /-- The scheduler's half is existentially hidden in an invariant. The only
 unshared half returned to the monitor is `owns`. -/
-def schedulerInv (N : Namespace) (γ : GName) (t : Tree ι ρ ε) : IProp GF :=
-  iprop(inv N (iprop(∃ (t : Tree ι ρ ε), owns (GF := GF) γ t)))
-
-/-- The only update used by the `next` protocol requires both matching halves. -/
-private theorem advance (γ : GName) (t s : ITree (BreakpointE ι + ε) ρ) :
-    iprop(owns (GF := GF) γ t ∗ owns γ t ∗ owns γ t) ⊢
-      iprop(|={∅}=> owns γ s ∗ owns γ s ∗ owns γ s) := by
-  unfold owns
-  iintro ⟨Ht, Hc⟩
-  imod ghost_var_update_2 (equivShrink _ s) γ (equivShrink _ t) (equivShrink _ t) $$ Ht Hc with H
-  imodintro
-  iexact H
+noncomputable def schedulerInv (N : Namespace) (γ : GName) (t : Tree ι ρ ε) : IProp GF :=
+  iprop(owns (GF := GF) γ t ∗ inv N (iprop(∃ t : Tree ι ρ ε, owns (GF := GF) γ t)))
 
 
 
 /-- A `next` must reach a breakpoint; normal termination is handled by `finish`. -/
-def handle (H : IHandlerBase (IProp GF) ε) (N : Namespace) (γ : GName)
+noncomputable def handle (H : IHandlerBase (IProp GF) ε) (N : Namespace) (γ : GName)
     (Φ : ULift Unit → IProp GF) : IProp GF :=
-  iprop(∀ t : ITree (BreakpointE ι + ε) ρ, schedulerInv N γ t ={∅}=∗
-    |={N, ∅}=> wpiUntil H t (fun outcome => match outcome with
+  iprop(∀ t : ITree (BreakpointE ι + ε) ρ,
+    schedulerInv (ι := ι) (ρ := ρ) (ε := ε) N γ t ={N, ∅}=∗
+    wpiUntil H t (fun outcome => match outcome with
       | .returned _ => iprop(False)
-      | .stopped _ rest => iprop(|={∅, N}=> schedulerInv N γ rest ∗ Φ (.up ()))))
+      | .stopped _ rest => iprop(|={∅, N}=>
+          owns (GF := GF) γ rest ∗ Φ (.up ()))))
 
 
 -- /-- Client rule: run the owned segment, then return the updated client token.
@@ -146,12 +121,16 @@ def handle (H : IHandlerBase (IProp GF) ε) (N : Namespace) (γ : GName)
   --   iframe Hauth
   --   iapply Hpost $$ Hclient
 
-/-- Finishing runs the remaining source tree to completion and returns its value. -/
-def handleFinish (H : IHandlerBase (IProp GF) ε) (N : Namespace) (γ : GName)
+/--
+  Finishing runs the remaining source tree to completion and returns its value.
+  Should contains no ghost updates.
+-/
+noncomputable def handleFinish (H : IHandlerBase (IProp GF) ε) (N : Namespace) (γ : GName)
     (Φ : ρ → IProp GF) : IProp GF :=
-  iprop(∀ t : Tree ι ρ ε, schedulerInv N γ t -∗
+  iprop(∀ t : Tree ι ρ ε, schedulerInv (ι := ι) (ρ := ρ) (ε := ε) N γ t -∗
     wpiUntil H t (fun outcome => match outcome with
-      | .returned r => iprop(|={N, ∅}=> schedulerInv N γ (ret r : Tree ι ρ ε) ∗ Φ r)
+      | .returned r => iprop(
+          schedulerInv (ι := ι) (ρ := ρ) (ε := ε) N γ (.ret r) ∗ Φ r)
       | .stopped _ _ => iprop(False)))
 
 -- /-- The client supplies the matching ownership and a terminal source VC. -/
@@ -180,7 +159,7 @@ def handleFinish (H : IHandlerBase (IProp GF) ε) (N : Namespace) (γ : GName)
 /-- Invariant-backed logical handler, with the same state-passing shape as
 `stateH`: each operation takes the current interpretation and returns its
 successor. Unlike `legacyHandler`, it does not hand out the private half. -/
-def handler (ι : Type) (ε : Type → Type) {ρ : Type}
+noncomputable def handler (ι : Type u) (ε : Type u → Type (max u v)) {ρ : Type u}
     [Small.{0} (Tree ι ρ ε)] [GhostVarG GF (Shrink.{0} (Tree ι ρ ε))]
     (N : Namespace) (H : IHandlerBase (IProp GF) ε) (γ : GName) :
     IHandlerBase (IProp GF) (NextE ρ) where
@@ -257,26 +236,42 @@ theorem controller₁_client_vc {N} {H : IHandlerBase (IProp GF) ε} {γ : GName
   nth_rw 1 [handle]
   imodintro
   unfold schedulerInv
-  iintro %t Hinv
-  imodintro
+  iintro %t ⟨Hmonitor, Hinv⟩
   iinv Hinv with Hinv
   isimp
   icases Timeless.timeless $$ Hinv with Hinv
-  iapply fupd_except0
-  imodintro
   imod Hinv
+  icases Hinv with ⟨%_, Hinv⟩
+  isimp only [owns] at Hs Hmonitor Hinv
+  frac_agree [Hs, Hmonitor, Hinv] as [eq₁, eq₂]
+  simp at eq₁ eq₂
+  subst eq₁
+  subst eq₂
+  isimp  [source₁_segment]
+  frac_update [Hs, Hmonitor, Hinv]
+    to (equivShrink _ <| (.ret r : Tree ι ρ ε)) with [Hs, Hmonitor, Hinv]
+  · grind
+  rw [<-owns]
   imodintro
-  ihave %agree : ⌜t = _⌝  $$ [Hs Hinv]
-  · iapply agreement $$ [Hs Hinv]
-    iframe
-  subst agree
-  icases BI.later_intro $$ Hinv with Hinv
-  iframe Hinv
-  isimp [source₁_segment]
+  isplitl [Hinv]
+  · imodintro
+    iexists _
+    iassumption
   iapply fupd_intro
+  isimp [handler, handleFinish, finish, schedulerInv]
   iapply fupd_mask_intro_subseteq
   · simp
-  ·
+  · iframe Hs
+    imodintro
+    iintro %t ⟨H, Hinv⟩
+    isimp only [owns] at H Hmonitor
+    frac_agree [H, Hmonitor] as [eq₁]
+    simp at eq₁
+    subst eq₁
+    rw [<-owns]
+    simp
+    imodintro
+    iframe
 
   -- isimp
   -- imodintro
@@ -294,7 +289,6 @@ theorem controller₁_client_vc {N} {H : IHandlerBase (IProp GF) ε} {γ : GName
   -- imodintro
   -- iintro Hret
   -- iapply Hcont $$ Hret
-
 /-- Reduced client VC for the first call. -/
 theorem controller_client_vc (H : IHandlerBase (IProp GF) ε) (γ : GName)
     (first second : ι) (r : ρ) (Φ : ρ → IProp GF) :
